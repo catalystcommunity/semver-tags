@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/catalystsquad/app-utils-go/logging"
 	"github.com/catalystsquad/semver-tags/core"
@@ -69,5 +70,9 @@ func initRunCmdConfig() *runCmdConfig {
 
 func runCommand(config *runCmdConfig) {
 	logging.Log.WithField("settings", fmt.Sprintf("%+v", *config)).Info("command run with settings resolved")
-	core.Check_commits()
+	err := core.Check_commits(config.DryRun, config.GithubAction, config.OutputJson, config.PreReleaseString, config.BuildString)
+	if err != nil {
+		logging.Log.WithError(err).Error("error checking commits")
+		os.Exit(1)
+	}
 }

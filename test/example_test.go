@@ -1,9 +1,11 @@
 package test
 
 import (
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"testing"
+
+	"github.com/catalystsquad/semver-tags/core/semver"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
 type ExampleSuite struct {
@@ -27,7 +29,27 @@ func TestExampleSuite(t *testing.T) {
 	suite.Run(t, new(ExampleSuite))
 }
 
-// an individual test example
-func (s *ExampleSuite) TestExample() {
-	require.True(s.T(), true)
+func (s *ExampleSuite) TestBumpMajor() {
+	version := semver.NewSemver(0, 1, 0)
+	version.BumpMajor()
+
+	assert.Equal(s.T(), version, semver.NewSemver(1, 0, 0), "bumpMajor did not give correct 1st bump result")
+	version.BumpMajor()
+	assert.Equal(s.T(), version, semver.NewSemver(2, 0, 0), "bumpMajor did not give correct 2nd bump result")
+}
+func (s *ExampleSuite) TestBumpMinor() {
+	version := semver.NewSemver(0, 1, 0)
+	version.BumpMinor()
+
+	assert.Equal(s.T(), version, semver.NewSemver(0, 2, 0), "bumpMajor did not give correct 1st bump result")
+	version.BumpMinor()
+	assert.Equal(s.T(), version, semver.NewSemver(0, 3, 0), "bumpMajor did not give correct 2nd bump result")
+}
+func (s *ExampleSuite) TestBumpPatch() {
+	version := semver.NewSemver(0, 1, 0)
+	version.BumpPatch()
+
+	assert.Equal(s.T(), version, semver.NewSemver(0, 1, 1), "bumpMajor did not give correct 1st bump result")
+	version.BumpPatch()
+	assert.Equal(s.T(), version, semver.NewSemver(0, 1, 2), "bumpMajor did not give correct 2nd bump result")
 }

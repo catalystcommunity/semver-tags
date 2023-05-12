@@ -19,7 +19,9 @@ var rootCmd = &cobra.Command{
 	Short: "Use git tag to add semantic-release style semver tags on conventional commits",
 	Long: `Calculate the next semver tag to add based on semantic-release style semver tags,
 	which will analyze conventional commits since the last relevant tags and
-	perform the git tags and changelog additions while providing state outputs.`,
+	perform the git tags and changelog additions while providing state outputs.
+	Normal LOG_LEVEL env var rule applies, if you want clean output, set it to ERROR
+	and check for the exit code being 0 before you parse.`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -66,5 +68,6 @@ func initConfig() {
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+		os.Exit(1)
 	}
 }
