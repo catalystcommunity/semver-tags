@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/catalystsquad/app-utils-go/logging"
 )
 
 type CommitType int
@@ -38,12 +36,9 @@ func (v *Semver) Clone() *Semver {
 
 // The only "logic" function, you have to pass in everything that could matter and it will bump appropriately
 func (v *Semver) BumpVersion(commitType CommitType, preRelease string, build string) {
-	logging.Log.Info(fmt.Sprintf("Bumping: %s\nBased on (type,pre-release,build): %d, %s, %s\n", v.FormattedString(), commitType, preRelease, build))
 	cleanPreRelease := strings.Trim(preRelease, " \n\r\t")
 	currentPreRelease := strings.Split(v.PreRelease, ".")[0]
 
-	logging.Log.Info(fmt.Sprintf("Clean PreRelease: %s\n", cleanPreRelease))
-	logging.Log.Info(fmt.Sprintf("Current PreRelease: %s\n", currentPreRelease))
 	if cleanPreRelease == currentPreRelease {
 		v.IncrementPreRelease()
 		return
@@ -51,7 +46,6 @@ func (v *Semver) BumpVersion(commitType CommitType, preRelease string, build str
 	// The current prerelease is not the same, so just set this one instead of incrementing Major/Minor/Patch
 	if cleanPreRelease != "" {
 		v.PreRelease = preRelease + ".1"
-		logging.Log.Info(fmt.Sprintf("Setting PreRelease: %s\n", v.PreRelease))
 		if build != "" {
 			v.Build = build
 		}

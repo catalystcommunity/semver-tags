@@ -342,15 +342,12 @@ func DoTagging(DryRun bool, GithubAction bool, OutputJson bool, PreReleaseString
 	for idx, _ := range results {
 		// Get the latest tag and hash that applies for this directory
 		results[idx].LastVersion, lastVersionError = GetLatestVersion(results[idx], PreReleaseString)
-		logging.Log.Info("Result of Latest Version:\n" + results[idx].Printable())
 		if lastVersionError != nil {
 			return lastVersionError
 		}
 		// Now analyze the commit history for that directory and only that directory
 		// Also, calculate the next version
-		logging.Log.Info(fmt.Sprintf("Before: %s\n", results[idx].Printable()))
 		commitsErr := AnalyzeCommits(&results[idx], PreReleaseString, BuildString)
-		logging.Log.Info(fmt.Sprintf("After: %s\n", results[idx].Printable()))
 
 		if commitsErr != nil {
 			return commitsErr
@@ -361,8 +358,7 @@ func DoTagging(DryRun bool, GithubAction bool, OutputJson bool, PreReleaseString
 	for _, result := range results {
 		if result.NextVersion == nil || result.LastVersion.Version.FormattedString() == result.NextVersion.Version.FormattedString() {
 			// This hasn't changed, so we don't need to do anything
-			logging.Log.Info("Trying to process tags:\n" + result.Printable())
-			logging.Log.Info(fmt.Sprintf("No new version for: %s", result.LastVersion.Package))
+			logging.Log.Info(fmt.Sprintf("No new version for: %s", result.Printable()))
 			continue
 		}
 		// We have a nextVersion, so build the tag with the optional package name
