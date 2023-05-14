@@ -4,6 +4,17 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/catalystsquad/app-utils-go/logging"
+)
+
+type CommitType int
+
+const (
+	NotConventional CommitType = iota
+	Patch
+	Minor
+	Major
 )
 
 type Semver struct {
@@ -23,6 +34,45 @@ func (v *Semver) Clone() *Semver {
 	retVal.PreRelease = v.PreRelease
 	retVal.Build = v.Build
 	return retVal
+}
+
+// The only "logic" function, you have to pass in everything that could matter and it will bump appropriately
+func (v *Semver) BumpVersion(commitType CommitType, preRelease string, build string) {
+	logging.Log.Info(fmt.Sprintf("Bumping: %s\nBased on (type,pre-release,build): %d, %s, %s\n", v.FormattedString(), commitType, preRelease, build))
+	cleanPreRelease := strings.Trim(preRelease, " \n\r\t")
+	currentPreRelease := strings.Split(v.PreRelease, ".")[0]
+
+	logging.Log.Info(fmt.Sprintf("Clean PreRelease: %s\n", cleanPreRelease))
+	logging.Log.Info(fmt.Sprintf("Current PreRelease: %s\n", currentPreRelease))
+	if cleanPreRelease == currentPreRelease {
+		v.IncrementPreRelease()
+		return
+	}
+	// The current prerelease is not the same, so just set this one instead of incrementing Major/Minor/Patch
+	if cleanPreRelease != "" {
+		v.PreRelease = preRelease + ".1"
+		logging.Log.Info(fmt.Sprintf("Setting PreRelease: %s\n", v.PreRelease))
+		if build != "" {
+			v.Build = build
+		}
+		return
+	}
+
+	switch commitType {
+	case Patch:
+		v.BumpPatch()
+	case Minor:
+		v.BumpMinor()
+	case Major:
+		v.BumpMajor()
+	case NotConventional:
+		return
+	default:
+		return
+	}
+	if build != "" {
+		v.Build = build
+	}
 }
 
 func (v *Semver) BumpMajor() {
@@ -46,19 +96,22 @@ func (v *Semver) BumpPatch() {
 	v.Build = ""
 }
 
-func (v *Semver) IncrementPreRelease() int {
+func (v *Semver) IncrementPreRelease() {
 	parts := strings.Split(v.PreRelease, ".")
 	if len(parts) < 2 {
-		return 1
+		v.PreRelease = parts[0] + ".2"
+		return
 	}
 
 	numberPart := parts[1]
 	number, err := strconv.Atoi(numberPart)
+	// If there's an error, assume it's a string and not an int, and make it 1
 	if err != nil {
-		return 1
+		v.PreRelease = parts[0] + ".1"
+		return
 	}
 
-	return number + 1
+	v.PreRelease = parts[0] + "." + fmt.Sprintf("%d", number+1)
 }
 
 func (v *Semver) FormattedString() string {

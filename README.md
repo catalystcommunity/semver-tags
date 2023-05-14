@@ -1,33 +1,24 @@
 # semver-tags
-This is a template repository for a working cobra cli application.
+
+Do an analysis of a repo or its subdirs and generate git tags for semantic versioning based on conventional commits. Oh, and release notes generated.
+
 ## Features
-* Implementation via [Cobra](https://github.com/spf13/cobra)
-* Configuration via [Viper](https://github.com/spf13/viper)
-* Error handling via [Nozzle's e library](https://github.com/nozzle/e) which includes support for sentry
-* Utilities from catalyst squad such as logging via logrus
-* Command configuration validation via [Go validator](https://github.com/asaskevich/govalidator)
-* Basic skaffold.yaml included
-* Basic Dockerfile included
-* Github workflows for release and image uploading included
+* Analyze a repo, or a set of directories in a repo and generate semantic version tags.
+* In github action mode, set outputs for use in other github action steps
+* Generate releaase notes
 
-## FAQ
-### How do I add a new command?
-You can do it manually by adding a new .go file in the `cmd` directory, but I'd recommend using the [cobra cli generator](https://github.com/spf13/cobra-cli/blob/main/README.md)
+## Why
 
-1. Install the generator globally with `go install github.com/spf13/cobra-cli@latest`
-2. Run `cobra-cli add myCommand`. This will generate a new go file and the skeleton for your new command.
-3. Add your flags if any in the `init()` method. See cmd/example.go for an example
-4. Add your config struct with validators
-5. Implement your run function. If you have config, make sure you call `GetConfigFromViper(config)` in the run function, it will not work in the `init()` function.
-6. See `cmd/example.go` for an example
+We used to use Semantic-Release which is fine and dandy. We had problems with plugins and using it in a github action when the commmunity struggled with the shift to ESM imports. We are sure it will work out fine, but we can't wait, so we took the piece that was most important and separated concerns. `semver-tags` won't do anything but generate tags and give us outputs to do other things. e.g. If we want to publish a release, that's a simple thing and we can do that in a separate step based on the outputs provided.
 
-### How do the flags and viper work together?
-Viper's global config is configured in `cmd/root.go#initConfig()`. We're using it to attempt to read configuration files as well as calling `viper.AutomaticEnv()` which will bind environment variables to flags when `viper.BindPFlags(flags)` is called
+## Status
 
-Binding flags should be done in each command's `init()` function. Calling `viper.BindPFlags(flags)` binds whatever configuration viper has found to viper. That could be a .yaml file, or env vars, or cli flags like --my_flag, this call makes viper aware of the flags and configs.
+Currently being experimented with. We're going to use this in production asap, but use at your own risk.
 
-### Why should I use `_` instead of `-` in my flag names?
-Simplicity. If your flag names are all strings separated with `_` then you can simply use an identically named environment variable to set the setting. If you use `-` then there's other viper config and trickery you have to do to get it to read the env vars correctly. I don't believe it's worth the extra stuff, just use `_` and it works well out of the box.
+## LICENSE
 
-### HALP
-If you need more help, create an issue, or reference the more detailed linked documentation to all the components comprising this app
+Apache 2.0
+
+## Contributing
+
+Uh... hit us up somewhere before you do any work. We're happy to accept PRs if they make sense, but we don't want anyone to waste their time on a feature or approach we won't accept. Feel free to fork though, just change the command/repo name.

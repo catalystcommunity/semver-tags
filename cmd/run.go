@@ -32,6 +32,7 @@ type runCmdConfig struct {
 	PreReleaseString string
 	BuildString      string
 	AllowedTypes     []string
+	Directories      []string
 }
 
 func init() {
@@ -42,6 +43,7 @@ func init() {
 	runCmd.PersistentFlags().String("pre_release_string", "", "the string that represents the pre-release part of the semver")
 	runCmd.PersistentFlags().String("build_string", "", "the string that represents the build part of the semver")
 	runCmd.PersistentFlags().StringArray("allowed_types", []string{"fix", "feat", "chore", "build", "docs", "ci"}, "conventional commit types allowed")
+	runCmd.PersistentFlags().StringArray("directories", []string{}, "the subdirectories to apply tags for, which makes github action outputs comma separated")
 
 	// bind flags
 	err := viper.BindPFlags(runCmd.PersistentFlags())
@@ -62,6 +64,7 @@ func initRunCmdConfig() *runCmdConfig {
 	config.PreReleaseString = viper.GetString("pre_release_string")
 	config.BuildString = viper.GetString("build_string")
 	config.AllowedTypes = viper.GetStringSlice("allowed_types")
+	config.Directories = viper.GetStringSlice("directories")
 
 	logging.Log.WithField("settings", fmt.Sprintf("%+v", *config)).Debug("viper settings")
 
@@ -70,7 +73,7 @@ func initRunCmdConfig() *runCmdConfig {
 
 func runCommand(config *runCmdConfig) {
 	logging.Log.WithField("settings", fmt.Sprintf("%+v", *config)).Info("command run with settings resolved")
-	err := core.Check_commits(config.DryRun, config.GithubAction, config.OutputJson, config.PreReleaseString, config.BuildString)
+	err := core.DoTagging(config.DryRun, config.GithubAction, config.OutputJson, config.PreReleaseString, config.BuildString, config.Directories)
 	if err != nil {
 		logging.Log.WithError(err).Error("error checking commits")
 		os.Exit(1)
