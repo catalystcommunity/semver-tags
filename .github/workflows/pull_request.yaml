@@ -40,7 +40,7 @@ jobs:
         uses: crazy-max/ghaction-dump-context@v2
       - name: Run Tests
         run: |
-          echo $(cwd)
+          echo $(pwd)
           go test -v ./...
       - name: semver-tags
         run: |
