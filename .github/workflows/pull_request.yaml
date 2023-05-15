@@ -55,6 +55,8 @@ jobs:
       - name: semver-tags
         run: |
           ./semver-tags run --dry_run --github_action 
+      - name: Dump Context After
+        uses: crazy-max/ghaction-dump-context@v2
       - name: tags-output
         run: |
           echo "${{ steps.semver-tags.outputs }}"
