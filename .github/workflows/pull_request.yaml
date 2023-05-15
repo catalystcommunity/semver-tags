@@ -62,7 +62,7 @@ jobs:
           echo "new_release_major_version: ${{ steps.semver-tags.outputs.new_release_major_version }}"
           echo "new_release_published: ${{ steps.semver-tags.outputs.new_release_published }}"
           echo "new_release_patch_version: ${{ steps.semver-tags.outputs.new_release_patch_version }}"
-          echo "new_release_git_head: ${{ steps.semver-tags.outputs. }}"
+          echo "new_release_git_head: ${{ steps.semver-tags.outputs.new_release_git_head }}"
           echo "new_release_git_tag: ${{ steps.semver-tags.outputs.new_release_git_tag }}"
           echo "last_release_version: ${{ steps.semver-tags.outputs.last_release_version }}"
           echo "last_release_git_head: ${{ steps.semver-tags.outputs.last_release_git_head }}"
