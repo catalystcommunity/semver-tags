@@ -1,4 +1,4 @@
-FROM golang:1.18 as builder
+FROM golang:1.20 as builder
 
 WORKDIR /workspace
 # install grpc health probe
@@ -13,14 +13,14 @@ RUN go mod download
 # copy source code
 COPY . .
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o main main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -race
 
 # Use distroless as minimal base image
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
-COPY --from=builder /workspace/main .
+COPY --from=builder /workspace/semver-tags .
 COPY --from=builder /bin/grpc_health_probe ./grpc_health_probe
 USER 65532:65532
 
-ENTRYPOINT ["/main", "run"]
+ENTRYPOINT ["/semver-tags", "run"]

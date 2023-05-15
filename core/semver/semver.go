@@ -99,7 +99,7 @@ func (v *Semver) IncrementPreRelease() {
 
 	numberPart := parts[1]
 	number, err := strconv.Atoi(numberPart)
-	// If there's an error, assume it's a string and not an int, and make it 1
+	// If there's an error, assume numberPart is a string and not an int, and make it 1
 	if err != nil {
 		v.PreRelease = parts[0] + ".1"
 		return
