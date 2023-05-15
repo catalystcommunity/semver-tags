@@ -26,7 +26,7 @@ jobs:
       - name: Compile
         uses: catalystsquad/action-compile-go@v1
         with:
-          go-version: 1.20
+          go-version: "1.20"
       - name: semver-tags
         run: |
           ./semver-tags run --github_action 
