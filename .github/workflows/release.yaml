@@ -35,20 +35,18 @@ jobs:
         shell: bash
         run: |
           go build -race
-      - name: semver-tags
+      - name: Semver Tags
+        id: semver-tags
         working-directory: ./
         run: |
           ./semver-tags run --github_action 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Make Release
+        uses: wangyoucao577/go-release-action@v1
         with:
-          tag_name: ${{ steps.semver-tags.outputs.new_release_version }}
-          release_name: ${{ steps.semantic.outputs.new_release_version }}
-          body: |
-            Changes in this Release
-            ${{ steps.semantic.outputs.release_notes }}
+          github_token: ${{ secrets.AUTOMATION_PAT }}
+          goos: linux
+          goarch: amd64
+          build_flags: -race
+          release_name: ${{ steps.semver-tags.outputs.new_release_version }}
 
 
