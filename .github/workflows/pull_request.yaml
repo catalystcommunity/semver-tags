@@ -54,7 +54,7 @@ jobs:
           ls -al .
           go build -race
           go test -v ./...
-      - name: semver-tags
+      - name: Semver Tags 
         id: semver-tags
         run: |
           ./semver-tags run --dry_run --github_action 
