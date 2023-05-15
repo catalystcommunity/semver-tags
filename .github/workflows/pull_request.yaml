@@ -50,6 +50,7 @@ jobs:
         run: |
           echo $(pwd)
           ls -al .
+          go build -race
           go test -v ./...
       - name: semver-tags
         run: |
