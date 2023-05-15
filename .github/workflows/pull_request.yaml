@@ -5,7 +5,8 @@ on:
       - main
     paths:
       - 'cmd/**'
-      - 'internal/**'
+      - 'core/**'
+      - 'test/**'
       - Dockerfile
       - 'go.mod'
       - 'go.sum'
@@ -43,3 +44,6 @@ jobs:
       - name: semver-tags
         run: |
           ./semver-tags run --dry_run --github_action 
+      - name: tags-output
+        run: |
+          echo "${{ steps.semver-tags.outputs }}"
