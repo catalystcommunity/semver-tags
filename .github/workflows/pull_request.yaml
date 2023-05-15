@@ -39,7 +39,9 @@ jobs:
       - name: Dump Context
         uses: crazy-max/ghaction-dump-context@v2
       - name: Run Tests
+        working-directory: ./
         run: |
+          cd 
           echo $(pwd)
           ls -al .
           go test -v ./...
