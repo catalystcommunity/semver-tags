@@ -16,3 +16,29 @@ jobs:
     name: Release 
     steps:
       - uses: crazy-max/ghaction-dump-context@v2
+  ensure-compile:
+    if: github.event.pull_request.draft == false
+    name: Ensure project compiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: crazy-max/ghaction-dump-context@v2
+      - name: Compile
+        uses: catalystsquad/action-compile-go@v1
+        with:
+          go-version: 1.20
+      - name: semver-tags
+        run: |
+          ./semver-tags run --github_action 
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.semver-tags.outputs.new_release_version }}
+          release_name: ${{ steps.semantic.outputs.new_release_version }}
+          body: |
+            Changes in this Release
+            ${{ steps.semantic.outputs.release_notes }}
+
+
