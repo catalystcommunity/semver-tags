@@ -26,8 +26,6 @@ jobs:
       - uses: crazy-max/ghaction-dump-context@v2
       - name: Checkout
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
       - name: Setup Go With Caching
         uses: magnetikonline/action-golang-cache@v4
         with:
@@ -47,6 +45,8 @@ jobs:
         uses: crazy-max/ghaction-dump-context@v2
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       - name: Run Tests
         working-directory: ./
         run: |
