@@ -39,7 +39,7 @@ func (v *Semver) BumpVersion(commitType CommitType, preRelease string, build str
 	cleanPreRelease := strings.Trim(preRelease, " \n\r\t")
 	currentPreRelease := strings.Split(v.PreRelease, ".")[0]
 
-	if cleanPreRelease == currentPreRelease {
+	if currentPreRelease != "" && cleanPreRelease == currentPreRelease {
 		v.IncrementPreRelease()
 		return
 	}
