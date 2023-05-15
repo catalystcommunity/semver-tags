@@ -41,6 +41,7 @@ jobs:
       - name: Run Tests
         run: |
           echo $(pwd)
+          ls -al .
           go test -v ./...
       - name: semver-tags
         run: |
