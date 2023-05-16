@@ -47,7 +47,7 @@ jobs:
       - name: Semver Tags 
         id: semver-tags
         run: |
-          ./semver-tags run --dry_run --github_action 
+          ./semver-tags run --dry_run --github_action | yq -P -o=json "."
       - name: tags-output
         run: |
           echo "new_release_published: ${{ steps.semver-tags.outputs.new_release_published }}"
