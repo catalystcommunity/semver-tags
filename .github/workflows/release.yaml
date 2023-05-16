@@ -41,12 +41,16 @@ jobs:
         run: |
           ./semver-tags run --github_action 
       - name: Make Release
-        uses: wangyoucao577/go-release-action@v1
-        with:
-          github_token: ${{ secrets.AUTOMATION_PAT }}
-          goos: linux
-          goarch: amd64
-          build_flags: -race
-          release_name: ${{ steps.semver-tags.outputs.new_release_version }}
-
-
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secretes.GITHUB_TOKEN }}
+          RELEASE_NAME: ${{ steps.semver-tags.outputs.new_release_version }}
+        run: |
+          tar -cvzf semver-tags.tar.gz ./semver-tags
+          curl -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer <YOUR-TOKEN>"\
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            ${{ vars.GITHUB_API_URL }}/repos/${{ vars.GITHUB_ACTION_REPOSITORY  }}/releases \
+            -d '{"tag_name":"${RELEASE_NAME}","target_commitish":"main","name":"${RELEASE_NAME}","body":"Released by Github Action","draft":false,"prerelease":false,"generate_release_notes":false}'

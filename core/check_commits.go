@@ -252,7 +252,7 @@ func AnalyzeCommits(dir *DirectoryVersionInfo, preRelease string, build string) 
 		default:
 			return fmt.Errorf("could not parse commit message: %s", string(line))
 		}
-		release_notes_items = append(release_notes_items, fmt.Sprintf(" * %s", line))
+		release_notes_items = append(release_notes_items, fmt.Sprintf("%s", line))
 	}
 
 	// If no change is needed, this will be a noOp
@@ -272,6 +272,7 @@ func SetGithubActionOutputs(results []DirectoryVersionInfo, dry_run bool) {
 	var new_release_patch_version string
 	var new_release_git_head string
 	var new_release_notes string
+	var new_release_notes_escaped string
 	var dry_runs string
 	var new_release_git_tag string
 	var last_release_version string
@@ -290,7 +291,8 @@ func SetGithubActionOutputs(results []DirectoryVersionInfo, dry_run bool) {
 		new_release_minor_version += fmt.Sprintf("%d", result.NextVersion.Version.Minor) + ","
 		new_release_patch_version += fmt.Sprintf("%d", result.NextVersion.Version.Patch) + ","
 		new_release_git_head += result.NextVersion.CommitHash + ","
-		new_release_notes += "* " + strings.Join(result.ReleaseNotes, "\n* ")
+		new_release_notes += strings.Join(result.ReleaseNotes, "\n")
+		new_release_notes_escaped += strings.Join(result.ReleaseNotes, "\\n")
 		dry_runs += strconv.FormatBool(dry_run) + ","
 		new_release_git_tag += result.NextVersion.Version.FormattedString() + ","
 		last_release_version += fmt.Sprintf("%d.%d.%d", result.LastVersion.Version.Major, result.LastVersion.Version.Minor, result.LastVersion.Version.Patch) + ","
@@ -302,7 +304,8 @@ func SetGithubActionOutputs(results []DirectoryVersionInfo, dry_run bool) {
 	gha.SetOutput("new_release_minor_version", strings.TrimRight(new_release_minor_version, ","))
 	gha.SetOutput("new_release_patch_version", strings.TrimRight(new_release_patch_version, ","))
 	gha.SetOutput("new_release_git_head", strings.TrimRight(new_release_git_head, ","))
-	gha.SetOutput("new_release_notes", strings.TrimRight(new_release_notes, "* "))
+	gha.SetOutput("new_release_notes", strings.TrimRight(new_release_notes, "\n"))
+	gha.SetOutput("new_release_notes_escaped", strings.TrimRight(new_release_notes, "\\n\n"))
 	gha.SetOutput("dry_run", strings.TrimRight(dry_runs, ","))
 	gha.SetOutput("new_release_git_tag", strings.TrimRight(new_release_git_tag, ","))
 	gha.SetOutput("last_release_version", strings.TrimRight(last_release_version, ","))
