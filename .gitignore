@@ -16,6 +16,7 @@
 
 # go build result
 semver-tags
+semver-tags.tar.gz
 
 # Editor directories and files
 .vscode/*

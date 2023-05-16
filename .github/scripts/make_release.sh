@@ -14,13 +14,13 @@ echo ${RELEASE_NAME}
 
 tar -cvzf "${TARFILE_NAME}" ./semver-tags
 
-curl -L \
-  -X POST \
-  -H "Accept: application/vnd.github+json" \
-  -H "Authorization: Bearer ${GITHUB_TOKEN}"\
-  -H "X-GitHub-Api-Version: 2022-11-28" \
-  "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/releases" \
-  -d '{"tag_name":"'${RELEASE_NAME}'","target_commitish":"main","name":"'${RELEASE_NAME}'","body":"Released by Github Action","draft":false,"prerelease":false,"generate_release_notes":false}'
+# curl -L \
+#   -X POST \
+#   -H "Accept: application/vnd.github+json" \
+#   -H "Authorization: Bearer ${GITHUB_TOKEN}"\
+#   -H "X-GitHub-Api-Version: 2022-11-28" \
+#   "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/releases" \
+#   -d '{"tag_name":"'${RELEASE_NAME}'","target_commitish":"main","name":"'${RELEASE_NAME}'","body":"Released by Github Action","draft":false,"prerelease":false,"generate_release_notes":false}'
 
 LATEST_RELEASE_ID=$(curl -L \
   -H "Accept: application/vnd.github+json" \
@@ -31,8 +31,8 @@ LATEST_RELEASE_ID=$(curl -L \
 curl -L \
   -X POST \
   -H "Accept: application/vnd.github+json" \
-  -H "Authorization: Bearer <YOUR-TOKEN>"\
+  -H "Authorization: Bearer ${GITHUB_TOKEN}"\
   -H "X-GitHub-Api-Version: 2022-11-28" \
   -H "Content-Type: application/octet-stream" \
-  "https://uploads.github.com/repos/${GITHUB_REPOSITORY}O/releases/${LATEST_RELEASE_ID}/assets?name=${TARFILE_NAME}" \
+  "https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${LATEST_RELEASE_ID}/assets?name=${TARFILE_NAME}" \
   --data-binary "@${TARFILE_NAME}"
