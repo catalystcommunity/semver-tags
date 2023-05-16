@@ -332,7 +332,7 @@ func SetGithubActionOutputs(results []DirectoryVersionInfo, dry_run bool) {
 	gha.SetOutput("new_release_minor_version", strings.TrimRight(new_release_minor_version, ","))
 	gha.SetOutput("new_release_patch_version", strings.TrimRight(new_release_patch_version, ","))
 	gha.SetOutput("new_release_git_head", strings.TrimRight(new_release_git_head, ","))
-	gha.SetOutput("new_release_notes", strings.TrimRight(new_release_notes, "\n"))
+	gha.SetOutput("new_release_notes", strings.TrimRight(new_release_notes, ",\n"))
 	gha.SetOutput("new_release_notes_json", new_release_notes_json)
 	gha.SetOutput("dry_run", strings.TrimRight(dry_runs, ","))
 	gha.SetOutput("new_release_git_tag", strings.TrimRight(new_release_git_tag, ","))
