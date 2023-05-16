@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -265,6 +266,15 @@ func AnalyzeCommits(dir *DirectoryVersionInfo, preRelease string, build string) 
 	return nil
 }
 
+func EscapeStringForJSON(input string) (string, error) {
+	escaped, err := json.Marshal(input)
+	if err != nil {
+		return "", err
+	}
+	// Convert []byte to string and remove the extra quotes added by Marshal
+	return string(escaped[1 : len(escaped)-1]), nil
+}
+
 func SetGithubActionOutputs(results []DirectoryVersionInfo, dry_run bool) {
 
 	var new_release_version string
@@ -273,14 +283,15 @@ func SetGithubActionOutputs(results []DirectoryVersionInfo, dry_run bool) {
 	var new_release_patch_version string
 	var new_release_git_head string
 	var new_release_notes string
-	var new_release_notes_escaped string
+	var new_release_notes_json string
 	var dry_runs string
 	var new_release_git_tag string
 	var last_release_version string
 	var last_release_git_head string
 	var last_release_git_tag string
 
-	new_release_notes_escaped = `{"new_releaes_notes_escaped":{`
+	// We're building a json string object for parsing release notes with whatever
+	new_release_notes_json = `{"new_releaes_notes_escaped":{`
 	for _, result := range results {
 		if result.NextVersion.Version.FormattedString() == result.LastVersion.Version.FormattedString() {
 			gha.SetOutput("new_release_published", "false")
@@ -294,24 +305,35 @@ func SetGithubActionOutputs(results []DirectoryVersionInfo, dry_run bool) {
 		new_release_patch_version += fmt.Sprintf("%d", result.NextVersion.Version.Patch) + ","
 		new_release_git_head += result.NextVersion.CommitHash + ","
 		new_release_notes += strings.Join(result.ReleaseNotes, "\n") + ",\n"
-		new_release_notes_escaped += `"package_` + result.NextVersion.Package + `":["` + strings.Join(result.ReleaseNotes, `","`) + "],"
+		result_escaped_release_notes := ""
+		for _, note := range result.ReleaseNotes {
+			escaped_note, err := EscapeStringForJSON(note)
+			if err != nil {
+				logging.Log.Error(fmt.Sprintf("Error escaping release note. \n%s\nRelease note: %s", err, note))
+				continue
+			}
+			result_escaped_release_notes += "\"" + escaped_note + "\","
+		}
+		strings.TrimRight(result_escaped_release_notes, ",")
+		new_release_notes_json += `"package_` + result.NextVersion.Package + `":["` + result_escaped_release_notes + "],"
 		dry_runs += strconv.FormatBool(dry_run) + ","
 		new_release_git_tag += result.NextVersion.Version.FormattedString() + ","
 		last_release_version += fmt.Sprintf("%d.%d.%d", result.LastVersion.Version.Major, result.LastVersion.Version.Minor, result.LastVersion.Version.Patch) + ","
 		last_release_git_head += result.LastVersion.CommitHash + ","
 		last_release_git_tag += result.LastVersion.Version.FormattedString() + ","
 	}
-	new_release_notes_escaped = strings.TrimRight(new_release_notes_escaped, ",")
-	new_release_notes_escaped += `}}`
+	// Shave off the last comma from the set of package notes
+	new_release_notes_json = strings.TrimRight(new_release_notes_json, ",")
+	new_release_notes_json += `}}`
 	re := regexp.MustCompile(`\r?\n`)
-	new_release_notes_escaped = re.ReplaceAllString(new_release_notes_escaped, "\\n")
+	new_release_notes_json = re.ReplaceAllString(new_release_notes_json, "\\n")
 	gha.SetOutput("new_release_version", strings.TrimRight(new_release_version, ","))
 	gha.SetOutput("new_release_major_version", strings.TrimRight(new_release_major_version, ","))
 	gha.SetOutput("new_release_minor_version", strings.TrimRight(new_release_minor_version, ","))
 	gha.SetOutput("new_release_patch_version", strings.TrimRight(new_release_patch_version, ","))
 	gha.SetOutput("new_release_git_head", strings.TrimRight(new_release_git_head, ","))
 	gha.SetOutput("new_release_notes", strings.TrimRight(new_release_notes, "\n"))
-	gha.SetOutput("new_release_notes_escaped", new_release_notes_escaped)
+	gha.SetOutput("new_release_notes_json", new_release_notes_json)
 	gha.SetOutput("dry_run", strings.TrimRight(dry_runs, ","))
 	gha.SetOutput("new_release_git_tag", strings.TrimRight(new_release_git_tag, ","))
 	gha.SetOutput("last_release_version", strings.TrimRight(last_release_version, ","))
