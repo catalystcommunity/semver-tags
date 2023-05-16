@@ -16,6 +16,23 @@ import (
 	gha "github.com/sethvargo/go-githubactions"
 )
 
+type Outputs struct {
+	New_release_published     string
+	New_release_version       string
+	New_release_major_version string
+	New_release_minor_version string
+	New_release_patch_version string
+	New_release_git_head      string
+	New_release_notes         string
+	New_release_notes_json    string
+	Dry_run                   string
+	Release_package           string
+	New_release_git_tag       string
+	Last_release_version      string
+	Last_release_git_head     string
+	Last_release_git_tag      string
+}
+
 type VersionInfo struct {
 	Package    string
 	Version    *semver.Semver
@@ -275,36 +292,26 @@ func EscapeStringForJSON(input string) (string, error) {
 	return string(escaped[1 : len(escaped)-1]), nil
 }
 
-func SetGithubActionOutputs(results []DirectoryVersionInfo, dry_run bool) {
-
-	var new_release_version string
-	var new_release_major_version string
-	var new_release_minor_version string
-	var new_release_patch_version string
-	var new_release_git_head string
-	var new_release_notes string
-	var new_release_notes_json string
-	var dry_runs string
-	var new_release_git_tag string
-	var last_release_version string
-	var last_release_git_head string
-	var last_release_git_tag string
+func GenerateOutputs(results []DirectoryVersionInfo, dry_run bool) Outputs {
+	retVal := Outputs{}
 
 	// We're building a json string object for parsing release notes with whatever
-	new_release_notes_json = `{"new_releaes_notes_escaped":{`
+	retVal.New_release_notes_json = `{"new_releaes_notes_escaped":{`
 	for _, result := range results {
 		if result.NextVersion.Version.FormattedString() == result.LastVersion.Version.FormattedString() {
-			gha.SetOutput("new_release_published", "false")
+			retVal.New_release_published += "false,"
 		} else {
-			gha.SetOutput("new_release_published", "true")
+			retVal.New_release_published += "true,"
 		}
 
-		new_release_version += fmt.Sprintf("%d.%d.%d", result.NextVersion.Version.Major, result.NextVersion.Version.Minor, result.NextVersion.Version.Patch) + ","
-		new_release_major_version += fmt.Sprintf("%d", result.NextVersion.Version.Major) + ","
-		new_release_minor_version += fmt.Sprintf("%d", result.NextVersion.Version.Minor) + ","
-		new_release_patch_version += fmt.Sprintf("%d", result.NextVersion.Version.Patch) + ","
-		new_release_git_head += result.NextVersion.CommitHash + ","
-		new_release_notes += strings.Join(result.ReleaseNotes, "\n") + ",\n"
+		retVal.Release_package += result.NextVersion.Package + ","
+
+		retVal.New_release_version += fmt.Sprintf("%d.%d.%d", result.NextVersion.Version.Major, result.NextVersion.Version.Minor, result.NextVersion.Version.Patch) + ","
+		retVal.New_release_major_version += fmt.Sprintf("%d", result.NextVersion.Version.Major) + ","
+		retVal.New_release_minor_version += fmt.Sprintf("%d", result.NextVersion.Version.Minor) + ","
+		retVal.New_release_patch_version += fmt.Sprintf("%d", result.NextVersion.Version.Patch) + ","
+		retVal.New_release_git_head += result.NextVersion.CommitHash + ","
+		retVal.New_release_notes += strings.Join(result.ReleaseNotes, "\n") + ",\n"
 		result_escaped_release_notes := ""
 		for _, note := range result.ReleaseNotes {
 			escaped_note, err := EscapeStringForJSON(note)
@@ -314,32 +321,54 @@ func SetGithubActionOutputs(results []DirectoryVersionInfo, dry_run bool) {
 			}
 			result_escaped_release_notes += "\"" + escaped_note + "\","
 		}
-		strings.TrimRight(result_escaped_release_notes, ",")
-		new_release_notes_json += `"package_` + result.NextVersion.Package + `":["` + result_escaped_release_notes + "],"
-		dry_runs += strconv.FormatBool(dry_run) + ","
-		new_release_git_tag += result.NextVersion.Version.FormattedString() + ","
-		last_release_version += fmt.Sprintf("%d.%d.%d", result.LastVersion.Version.Major, result.LastVersion.Version.Minor, result.LastVersion.Version.Patch) + ","
-		last_release_git_head += result.LastVersion.CommitHash + ","
-		last_release_git_tag += result.LastVersion.Version.FormattedString() + ","
+		result_escaped_release_notes = strings.TrimRight(result_escaped_release_notes, ",")
+		retVal.New_release_notes_json += `"package_` + result.NextVersion.Package + `":[` + result_escaped_release_notes + "],"
+		retVal.Dry_run += strconv.FormatBool(dry_run) + ","
+		retVal.New_release_git_tag += result.NextVersion.Version.FormattedString() + ","
+		retVal.Last_release_version += fmt.Sprintf("%d.%d.%d", result.LastVersion.Version.Major, result.LastVersion.Version.Minor, result.LastVersion.Version.Patch) + ","
+		retVal.Last_release_git_head += result.LastVersion.CommitHash + ","
+		retVal.Last_release_git_tag += result.LastVersion.Version.FormattedString() + ","
 	}
 	// Shave off the last comma from the set of package notes
-	new_release_notes_json = strings.TrimRight(new_release_notes_json, ",")
-	new_release_notes_json += `}}`
+	retVal.New_release_notes_json = strings.TrimRight(retVal.New_release_notes_json, ",")
+	retVal.New_release_notes_json += `}}`
 	re := regexp.MustCompile(`\r?\n`)
-	new_release_notes_json = re.ReplaceAllString(new_release_notes_json, "\\n")
-	gha.SetOutput("new_release_version", strings.TrimRight(new_release_version, ","))
-	gha.SetOutput("new_release_major_version", strings.TrimRight(new_release_major_version, ","))
-	gha.SetOutput("new_release_minor_version", strings.TrimRight(new_release_minor_version, ","))
-	gha.SetOutput("new_release_patch_version", strings.TrimRight(new_release_patch_version, ","))
-	gha.SetOutput("new_release_git_head", strings.TrimRight(new_release_git_head, ","))
-	gha.SetOutput("new_release_notes", strings.TrimRight(new_release_notes, ",\n"))
+	retVal.New_release_notes_json = re.ReplaceAllString(retVal.New_release_notes_json, "\\n")
+
+	// Clean up trailing items
+	retVal.New_release_published = strings.TrimRight(retVal.New_release_published, ",")
+	retVal.New_release_version = strings.TrimRight(retVal.New_release_version, ",")
+	retVal.New_release_major_version = strings.TrimRight(retVal.New_release_major_version, ",")
+	retVal.New_release_minor_version = strings.TrimRight(retVal.New_release_minor_version, ",")
+	retVal.New_release_patch_version = strings.TrimRight(retVal.New_release_patch_version, ",")
+	retVal.New_release_git_head = strings.TrimRight(retVal.New_release_git_head, ",")
+	retVal.New_release_notes = strings.TrimRight(retVal.New_release_notes, ",\n")
+	retVal.Dry_run = strings.TrimRight(retVal.Dry_run, ",")
+	retVal.Release_package = strings.TrimRight(retVal.Release_package, ",\n")
+	retVal.New_release_git_tag = strings.TrimRight(retVal.New_release_git_tag, ",")
+	retVal.Last_release_version = strings.TrimRight(retVal.Last_release_version, ",")
+	retVal.Last_release_git_head = strings.TrimRight(retVal.Last_release_git_head, ",")
+	retVal.Last_release_git_tag = strings.TrimRight(retVal.Last_release_git_tag, ",")
+
+	return retVal
+}
+
+func SetGithubActionOutputs(results Outputs) {
+	gha.SetOutput("new_release_published", results.New_release_published)
+	gha.SetOutput("new_release_version", results.New_release_version)
+	gha.SetOutput("new_release_major_version", results.New_release_major_version)
+	gha.SetOutput("new_release_minor_version", results.New_release_minor_version)
+	gha.SetOutput("new_release_patch_version", results.New_release_patch_version)
+	gha.SetOutput("new_release_git_head", results.New_release_git_head)
+	gha.SetOutput("new_release_notes", results.New_release_notes)
 	// This is just too powerful (and wrong) to use right now
-	// gha.SetOutput("new_release_notes_json", new_release_notes_json)
-	gha.SetOutput("dry_run", strings.TrimRight(dry_runs, ","))
-	gha.SetOutput("new_release_git_tag", strings.TrimRight(new_release_git_tag, ","))
-	gha.SetOutput("last_release_version", strings.TrimRight(last_release_version, ","))
-	gha.SetOutput("last_release_git_head", strings.TrimRight(last_release_git_head, ","))
-	gha.SetOutput("last_release_git_tag", strings.TrimRight(last_release_git_tag, ","))
+	// gha.SetOutput("new_release_notes_json", results.New_release_notes_json)
+	gha.SetOutput("dry_run", results.Dry_run)
+	gha.SetOutput("release_package", results.Release_package)
+	gha.SetOutput("new_release_git_tag", results.New_release_git_tag)
+	gha.SetOutput("last_release_version", results.Last_release_version)
+	gha.SetOutput("last_release_git_head", results.Last_release_git_head)
+	gha.SetOutput("last_release_git_tag", results.Last_release_git_tag)
 }
 
 func DoTagging(DryRun bool, GithubAction bool, OutputJson bool, PreReleaseString string, BuildString string, Directories []string) error {
@@ -408,6 +437,8 @@ func DoTagging(DryRun bool, GithubAction bool, OutputJson bool, PreReleaseString
 			}
 		}
 	}
+
+	Outputs := GenerateOutputs(results, DryRun)
 	// We don't need to push tags if this is a dry run
 	if !DryRun {
 		// All tags should be there, so push! This prevents tags being pushed if there were errors
@@ -420,7 +451,15 @@ func DoTagging(DryRun bool, GithubAction bool, OutputJson bool, PreReleaseString
 
 	// If in githubactions, output each output, comma separated for each directory
 	if GithubAction {
-		SetGithubActionOutputs(results, DryRun)
+		SetGithubActionOutputs(Outputs)
+	}
+
+	if OutputJson {
+		outputJson, err := json.Marshal(Outputs)
+		if err != nil {
+			return err
+		}
+		fmt.Print(string(outputJson))
 	}
 
 	return nil
