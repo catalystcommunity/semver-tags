@@ -18,25 +18,7 @@ jobs:
     steps:
       - uses: crazy-max/ghaction-dump-context@v2
       - uses: catalystsquad/action-validate-conventional-commits-pr@v1
-  ensure-compile:
-    if: github.event.pull_request.draft == false
-    name: Ensure project compiles
-    runs-on: ubuntu-latest
-    steps:
-      - uses: crazy-max/ghaction-dump-context@v2
-      - name: Checkout
-        uses: actions/checkout@v3
-      - name: Setup Go With Caching
-        uses: magnetikonline/action-golang-cache@v4
-        with:
-          go-version: "1.20"
-      - name: Compile
-        shell: bash
-        run: |
-          go build -race
-  test:
-    needs:
-      - ensure-compile
+ test:
     name: Test
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
@@ -47,6 +29,14 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+      - name: Setup Go With Caching
+        uses: magnetikonline/action-golang-cache@v4
+        with:
+          go-version: "1.20"
+      - name: Compile
+        shell: bash
+        run: |
+          go build -race
       - name: Run Tests
         working-directory: ./
         run: |
