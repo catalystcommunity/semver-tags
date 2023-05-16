@@ -291,8 +291,8 @@ func SetGithubActionOutputs(results []DirectoryVersionInfo, dry_run bool) {
 		new_release_minor_version += fmt.Sprintf("%d", result.NextVersion.Version.Minor) + ","
 		new_release_patch_version += fmt.Sprintf("%d", result.NextVersion.Version.Patch) + ","
 		new_release_git_head += result.NextVersion.CommitHash + ","
-		new_release_notes += strings.Join(result.ReleaseNotes, "\n")
-		new_release_notes_escaped += strings.Join(result.ReleaseNotes, "\\n")
+		new_release_notes += strings.Join(result.ReleaseNotes, "\n") + ",\n"
+		new_release_notes_escaped += strings.Join(result.ReleaseNotes, "\\n") + "\\n"
 		dry_runs += strconv.FormatBool(dry_run) + ","
 		new_release_git_tag += result.NextVersion.Version.FormattedString() + ","
 		last_release_version += fmt.Sprintf("%d.%d.%d", result.LastVersion.Version.Major, result.LastVersion.Version.Minor, result.LastVersion.Version.Patch) + ","
