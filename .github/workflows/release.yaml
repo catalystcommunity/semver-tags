@@ -35,7 +35,7 @@ jobs:
         id: semver-tags
         working-directory: ./
         run: |
-          ./semver-tags run --github_action 
+          ./semver-tags run --github_action | yq -P -o=json "."
       - name: Make Release
         shell: bash
         env:
