@@ -296,7 +296,7 @@ func GenerateOutputs(results []DirectoryVersionInfo, dry_run bool) Outputs {
 	retVal := Outputs{}
 
 	// We're building a json string object for parsing release notes with whatever
-	retVal.New_release_notes_json = `{"new_releaes_notes_escaped":{`
+	retVal.New_release_notes_json = `{"new_release_notes_escaped":{`
 	for _, result := range results {
 		if result.NextVersion.Version.FormattedString() == result.LastVersion.Version.FormattedString() {
 			retVal.New_release_published += "false,"
@@ -327,7 +327,7 @@ func GenerateOutputs(results []DirectoryVersionInfo, dry_run bool) Outputs {
 		retVal.New_release_git_tag += result.NextVersion.Version.FormattedString() + ","
 		retVal.Last_release_version += fmt.Sprintf("%d.%d.%d", result.LastVersion.Version.Major, result.LastVersion.Version.Minor, result.LastVersion.Version.Patch) + ","
 		retVal.Last_release_git_head += result.LastVersion.CommitHash + ","
-		retVal.Last_release_git_tag += result.LastVersion.Version.FormattedString() + ","
+		retVal.Last_release_git_tag += result.NextVersion.Package + "/" + result.LastVersion.Version.FormattedString() + ","
 	}
 	// Shave off the last comma from the set of package notes
 	retVal.New_release_notes_json = strings.TrimRight(retVal.New_release_notes_json, ",")
@@ -361,8 +361,7 @@ func SetGithubActionOutputs(results Outputs) {
 	gha.SetOutput("new_release_patch_version", results.New_release_patch_version)
 	gha.SetOutput("new_release_git_head", results.New_release_git_head)
 	gha.SetOutput("new_release_notes", results.New_release_notes)
-	// This is just too powerful (and wrong) to use right now
-	// gha.SetOutput("new_release_notes_json", results.New_release_notes_json)
+	gha.SetOutput("new_release_notes_json", results.New_release_notes_json)
 	gha.SetOutput("dry_run", results.Dry_run)
 	gha.SetOutput("release_package", results.Release_package)
 	gha.SetOutput("new_release_git_tag", results.New_release_git_tag)
