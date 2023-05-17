@@ -327,7 +327,11 @@ func GenerateOutputs(results []DirectoryVersionInfo, dry_run bool) Outputs {
 		retVal.New_release_git_tag += result.NextVersion.Version.FormattedString() + ","
 		retVal.Last_release_version += fmt.Sprintf("%d.%d.%d", result.LastVersion.Version.Major, result.LastVersion.Version.Minor, result.LastVersion.Version.Patch) + ","
 		retVal.Last_release_git_head += result.LastVersion.CommitHash + ","
-		retVal.Last_release_git_tag += result.NextVersion.Package + "/" + result.LastVersion.Version.FormattedString() + ","
+		prepended_package := result.NextVersion.Package
+		if result.NextVersion.Package != "" {
+			prepended_package += "/"
+		}
+		retVal.Last_release_git_tag += prepended_package + result.LastVersion.Version.FormattedString() + ","
 	}
 	// Shave off the last comma from the set of package notes
 	retVal.New_release_notes_json = strings.TrimRight(retVal.New_release_notes_json, ",")
