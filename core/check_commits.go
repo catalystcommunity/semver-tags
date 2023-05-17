@@ -324,13 +324,13 @@ func GenerateOutputs(results []DirectoryVersionInfo, dry_run bool) Outputs {
 		result_escaped_release_notes = strings.TrimRight(result_escaped_release_notes, ",")
 		retVal.New_release_notes_json += `"package_` + result.NextVersion.Package + `":[` + result_escaped_release_notes + "],"
 		retVal.Dry_run += strconv.FormatBool(dry_run) + ","
-		retVal.New_release_git_tag += result.NextVersion.Version.FormattedString() + ","
-		retVal.Last_release_version += fmt.Sprintf("%d.%d.%d", result.LastVersion.Version.Major, result.LastVersion.Version.Minor, result.LastVersion.Version.Patch) + ","
-		retVal.Last_release_git_head += result.LastVersion.CommitHash + ","
 		prepended_package := result.NextVersion.Package
 		if result.NextVersion.Package != "" {
 			prepended_package += "/"
 		}
+		retVal.New_release_git_tag += prepended_package + result.NextVersion.Version.FormattedString() + ","
+		retVal.Last_release_version += fmt.Sprintf("%d.%d.%d", result.LastVersion.Version.Major, result.LastVersion.Version.Minor, result.LastVersion.Version.Patch) + ","
+		retVal.Last_release_git_head += result.LastVersion.CommitHash + ","
 		retVal.Last_release_git_tag += prepended_package + result.LastVersion.Version.FormattedString() + ","
 	}
 	// Shave off the last comma from the set of package notes
