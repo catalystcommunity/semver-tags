@@ -61,6 +61,6 @@ jobs:
           echo "last_release_git_head: ${{ steps.semver-tags.outputs.last_release_git_head }}"
           echo "last_release_git_tag: ${{ steps.semver-tags.outputs.last_release_git_tag }}"
           echo "dry_run: ${{ steps.semver-tags.outputs.dry_run }}"
-          echo "new_release_notes_json: NOT AVAILABLE AT THIS TIME"
+          echo "new_release_notes_json: ${{ steps.semver-tags.outputs.new_release_notes_json }}"
           echo "new_release_notes: ${{ steps.semver-tags.outputs.new_release_notes }}"
 
