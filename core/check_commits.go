@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -53,6 +55,7 @@ type DirectoryVersionInfo struct {
 	LastVersion  *VersionInfo
 	NextVersion  *VersionInfo
 	ReleaseNotes []string
+	UseRoot      bool
 }
 
 func (d *DirectoryVersionInfo) Printable() string {
@@ -208,7 +211,11 @@ func GetLatestVersion(dir DirectoryVersionInfo, preRelease string) (*VersionInfo
 	// So we can just find the first that applies
 	pathParts := strings.Split(strings.TrimRight(dir.Directory, "/"), "/")
 	packageName := pathParts[len(pathParts)-1]
+	if dir.UseRoot {
+		packageName = dir.Directory
+	}
 	for _, tag := range latestTagInfo {
+		// This is redundant in the case of UseRoot, which affects git command paths
 		if tag.Package == packageName || tag.Package == dir.Directory {
 			retVal = &VersionInfo{
 				Package:    packageName,
@@ -236,6 +243,9 @@ func GetLatestVersion(dir DirectoryVersionInfo, preRelease string) (*VersionInfo
 func AnalyzeCommits(dir *DirectoryVersionInfo, preRelease string, build string) error {
 	nextVersion := dir.LastVersion.Version.Clone()
 	packagePath := strings.TrimRight(dir.Directory, "/")
+	if dir.UseRoot {
+		packagePath = "./"
+	}
 	if packagePath == "" {
 		packagePath = strings.TrimRight(dir.FullPath, "/")
 	}
@@ -392,10 +402,20 @@ func DoTagging(DryRun bool, GithubAction bool, OutputJson bool, PreReleaseString
 	isFullRepo := len(Directories) == 0
 	// This will never run if we're in fullRepo mode
 	for _, dir := range Directories {
+		useRoot := false
+		fullPath := gitRoot
 		sanedir := strings.Trim(dir, string(os.PathSeparator))
+		gitRootPath, _ := filepath.Abs(gitRoot)
+		dirPath, _ := filepath.Abs(dir)
+		if gitRootPath == dirPath {
+			useRoot = true
+			sanedir = path.Base(gitRootPath)
+			fullPath = path.Dir(gitRoot)
+		}
 		results = append(results, DirectoryVersionInfo{
 			Directory: sanedir,
-			FullPath:  gitRoot,
+			FullPath:  fullPath,
+			UseRoot:   useRoot,
 		})
 	}
 	if isFullRepo {
