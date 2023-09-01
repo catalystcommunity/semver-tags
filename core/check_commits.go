@@ -398,6 +398,7 @@ func DoTagging(DryRun bool, GithubAction bool, OutputJson bool, PreReleaseString
 
 	var results []DirectoryVersionInfo
 
+	gitRootPath, _ := filepath.Abs(gitRoot)
 	// We need to know if we're in full repo mode or subdirectory mode
 	isFullRepo := len(Directories) == 0
 	// This will never run if we're in fullRepo mode
@@ -405,7 +406,6 @@ func DoTagging(DryRun bool, GithubAction bool, OutputJson bool, PreReleaseString
 		useRoot := false
 		fullPath := gitRoot
 		sanedir := strings.Trim(dir, string(os.PathSeparator))
-		gitRootPath, _ := filepath.Abs(gitRoot)
 		dirPath, _ := filepath.Abs(dir)
 		if gitRootPath == dirPath {
 			useRoot = true
