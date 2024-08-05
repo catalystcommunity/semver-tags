@@ -4,7 +4,7 @@ set -e
 
 RELEASE_NAME="${RELEASE_NAME:-$1}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-notarealtoken}"
-GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-catalystsquad/semver-tags}"
+GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-catalystcommunity/semver-tags}"
 DEFAULT_GITHUB_API_URL="https://api.github.com"
 GITHUB_API_URL="${GITHUB_API_URL:-${DEFAULT_GITHUB_API_URL}}"
 

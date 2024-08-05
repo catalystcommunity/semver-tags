@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: crazy-max/ghaction-dump-context@v2
-      - uses: catalystsquad/action-validate-conventional-commits-pr@v1
+      - uses: catalystcommunity/action-validate-conventional-commits-pr@v1
   test:
     name: Test
     if: github.event.pull_request.draft == false
