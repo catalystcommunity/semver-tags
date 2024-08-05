@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/catalystsquad/app-utils-go/logging"
-	"github.com/catalystsquad/semver-tags/core/semver"
+	"github.com/catalystcommunity/app-utils-go/logging"
+	"github.com/catalystcommunity/semver-tags/core/semver"
 
 	gha "github.com/sethvargo/go-githubactions"
 )

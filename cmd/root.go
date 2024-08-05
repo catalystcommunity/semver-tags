@@ -1,5 +1,5 @@
 /*
-Copyright © 2023 Catalyst Squad <info@catalystsquad.com>
+Copyright © 2023 Catalyst Squad <info@catalystcommunity.com>
 */
 package cmd
 

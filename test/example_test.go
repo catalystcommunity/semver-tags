@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	"github.com/catalystsquad/semver-tags/core/semver"
+	"github.com/catalystcommunity/semver-tags/core/semver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )

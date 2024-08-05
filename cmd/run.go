@@ -1,5 +1,5 @@
 /*
-Copyright © 2023 Catalyst Squad <info@catalystsquad.com>
+Copyright © 2023 Catalyst Squad <info@catalystcommunity.com>
 */
 package cmd
 
@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/catalystsquad/app-utils-go/logging"
-	"github.com/catalystsquad/semver-tags/core"
+	"github.com/catalystcommunity/app-utils-go/logging"
+	"github.com/catalystcommunity/semver-tags/core"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
