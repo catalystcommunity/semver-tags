@@ -3,7 +3,7 @@ module github.com/catalystcommunity/semver-tags
 go 1.20
 
 require (
-	github.com/catalystcommunity/app-utils-go v1.0.7
+	github.com/catalystcommunity/app-utils-go v1.0.9
 	github.com/sethvargo/go-githubactions v1.1.0
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/viper v1.15.0
