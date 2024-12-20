@@ -481,7 +481,6 @@ func DoTagging(
 		}
 		cmdArgs = append(cmdArgs, []string{Remote, Branch}...)
 		cmdArgs = append(cmdArgs, tags...)
-		logging.Log.Info(fmt.Sprintf("Some test string: %s", strings.Join(cmdArgs, " ")))
 		// All tags should be there, so push! This prevents tags being pushed if there were errors
 		// Ex. cmd: git push --atomic origin main tagOne tagTwo
 		cmd := exec.Command("git", cmdArgs...)
