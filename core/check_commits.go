@@ -384,7 +384,7 @@ func SetGithubActionOutputs(results Outputs) {
 	gha.SetOutput("last_release_git_tag", results.Last_release_git_tag)
 }
 
-func DoTagging(DryRun bool, GithubAction bool, OutputJson bool, PreReleaseString string, BuildString string, Directories []string) error {
+func DoTagging(DryRun bool, GithubAction bool, OutputJson bool, PreReleaseString string, BuildString string, Remote string, Branch string, Directories []string) error {
 	// Make sure we're in a git repo with a git command or this is pointless
 	if !IsGitRepo() {
 		return errors.New("current directory is not a git repo, nothing to do")
@@ -464,8 +464,11 @@ func DoTagging(DryRun bool, GithubAction bool, OutputJson bool, PreReleaseString
 	Outputs := GenerateOutputs(results, DryRun)
 	// We don't need to push tags if this is a dry run
 	if !DryRun {
+		tags := strings.Split(Outputs.New_release_git_tag, ",")
+		cmdArgs := []string{"push", "--atomic", Remote, Branch}
+		cmdArgs = append(cmdArgs, tags...)
 		// All tags should be there, so push! This prevents tags being pushed if there were errors
-		cmd := exec.Command("git", "push", "--tags")
+		cmd := exec.Command("git", cmdArgs...)
 		output, err := cmd.Output()
 		if err != nil {
 			return fmt.Errorf("error pushing tags: %s\n%s", err, string(output))

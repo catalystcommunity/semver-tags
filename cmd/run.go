@@ -31,6 +31,8 @@ type runCmdConfig struct {
 	OutputJson       bool
 	PreReleaseString string
 	BuildString      string
+	Remote           string
+	Branch           string
 	AllowedTypes     []string
 	Directories      []string
 }
@@ -42,6 +44,8 @@ func init() {
 	runCmd.PersistentFlags().Bool("output_json", true, "when true, print a json object of results, including dry_run status")
 	runCmd.PersistentFlags().String("pre_release_string", "", "the string that represents the pre-release part of the semver")
 	runCmd.PersistentFlags().String("build_string", "", "the string that represents the build part of the semver")
+	runCmd.PersistentFlags().String("remote", "origin", "the name of the remote to push to")
+	runCmd.PersistentFlags().String("branch", "main", "the name of the branch to push to")
 	runCmd.PersistentFlags().StringArray("allowed_types", []string{"fix", "feat", "chore", "build", "docs", "ci"}, "conventional commit types allowed")
 	runCmd.PersistentFlags().StringArray("directories", []string{}, "the subdirectories to apply tags for, which makes github action outputs comma separated")
 
@@ -63,6 +67,8 @@ func initRunCmdConfig() *runCmdConfig {
 	config.OutputJson = viper.GetBool("output_json")
 	config.PreReleaseString = viper.GetString("pre_release_string")
 	config.BuildString = viper.GetString("build_string")
+	config.Remote = viper.GetString("remote")
+	config.Branch = viper.GetString("branch")
 	config.AllowedTypes = viper.GetStringSlice("allowed_types")
 	config.Directories = viper.GetStringSlice("directories")
 
@@ -73,7 +79,7 @@ func initRunCmdConfig() *runCmdConfig {
 
 func runCommand(config *runCmdConfig) {
 	logging.Log.WithField("settings", fmt.Sprintf("%+v", *config)).Info("command run with settings resolved")
-	err := core.DoTagging(config.DryRun, config.GithubAction, config.OutputJson, config.PreReleaseString, config.BuildString, config.Directories)
+	err := core.DoTagging(config.DryRun, config.GithubAction, config.OutputJson, config.PreReleaseString, config.BuildString, config.Remote, config.Branch, config.Directories)
 	if err != nil {
 		logging.Log.WithError(err).Error("error checking commits")
 		os.Exit(1)
