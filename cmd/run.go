@@ -29,6 +29,7 @@ type runCmdConfig struct {
 	DryRun           bool
 	GithubAction     bool
 	OutputJson       bool
+	Atomic           bool
 	PreReleaseString string
 	BuildString      string
 	Remote           string
@@ -42,6 +43,7 @@ func init() {
 	runCmd.PersistentFlags().Bool("dry_run", false, "when true, do not do any tagging or writing to changelog")
 	runCmd.PersistentFlags().Bool("github_action", false, "when true, make github action outputs for use in other steps")
 	runCmd.PersistentFlags().Bool("output_json", true, "when true, print a json object of results, including dry_run status")
+	runCmd.PersistentFlags().Bool("atomic", true, "when true, uses the --atomic flag with git push, otherwise uses a regular push")
 	runCmd.PersistentFlags().String("pre_release_string", "", "the string that represents the pre-release part of the semver")
 	runCmd.PersistentFlags().String("build_string", "", "the string that represents the build part of the semver")
 	runCmd.PersistentFlags().String("remote", "origin", "the name of the remote to push to")
@@ -65,6 +67,7 @@ func initRunCmdConfig() *runCmdConfig {
 	config.DryRun = viper.GetBool("dry_run")
 	config.GithubAction = viper.GetBool("github_action")
 	config.OutputJson = viper.GetBool("output_json")
+	config.Atomic = viper.GetBool("atomic")
 	config.PreReleaseString = viper.GetString("pre_release_string")
 	config.BuildString = viper.GetString("build_string")
 	config.Remote = viper.GetString("remote")
@@ -79,7 +82,17 @@ func initRunCmdConfig() *runCmdConfig {
 
 func runCommand(config *runCmdConfig) {
 	logging.Log.WithField("settings", fmt.Sprintf("%+v", *config)).Info("command run with settings resolved")
-	err := core.DoTagging(config.DryRun, config.GithubAction, config.OutputJson, config.PreReleaseString, config.BuildString, config.Remote, config.Branch, config.Directories)
+	err := core.DoTagging(
+		config.DryRun,
+		config.GithubAction,
+		config.OutputJson,
+		config.Atomic,
+		config.PreReleaseString,
+		config.BuildString,
+		config.Remote,
+		config.Branch,
+		config.Directories,
+	)
 	if err != nil {
 		logging.Log.WithError(err).Error("error checking commits")
 		os.Exit(1)
