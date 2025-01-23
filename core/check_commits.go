@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -484,9 +485,29 @@ func DoTagging(
 		// All tags should be there, so push! This prevents tags being pushed if there were errors
 		// Ex. cmd: git push --atomic origin main tagOne tagTwo
 		cmd := exec.Command("git", cmdArgs...)
-		output, err := cmd.Output()
+
+		cmdOutPipe, err := cmd.StdoutPipe()
 		if err != nil {
-			return fmt.Errorf("error pushing tags: %s\n%s", err, string(output))
+			return fmt.Errorf("error getting stdout pipe: %s", err)
+		}
+		cmdErrPipe, err := cmd.StderrPipe()
+		if err != nil {
+			return fmt.Errorf("error getting stderr pipe: %s", err)
+		}
+
+		cmd.Start()
+		output, err := io.ReadAll(cmdOutPipe)
+		if err != nil {
+			return fmt.Errorf("error reading cmd stdout: %s", err)
+		}
+		cmdErrOut, err := io.ReadAll(cmdErrPipe)
+		if err != nil {
+			return fmt.Errorf("error reading cmd stderr: %s", err)
+		}
+
+		err = cmd.Wait()
+		if err != nil {
+			return fmt.Errorf("error pushing tags: %s\n%s\n%s", err, string(output), string(cmdErrOut))
 		}
 	}
 
