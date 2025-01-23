@@ -507,7 +507,7 @@ func DoTagging(
 
 		err = cmd.Wait()
 		if err != nil {
-			return fmt.Errorf("error pushing tags: %s\n%s\n%s", err, string(output), string(cmdErrOut))
+			return fmt.Errorf("error pushing tags: %sn%s\n%s", err, string(output), string(cmdErrOut))
 		}
 	}
 
