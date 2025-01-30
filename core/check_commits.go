@@ -99,7 +99,7 @@ func AnalyzeCommitMessage(message string) semver.CommitType {
 	}
 
 	switch commitType {
-	case "fix", "chore", "docs", "style", "refactor", "test", "revert":
+	case "fix", "chore", "ci", "docs", "style", "refactor", "test", "revert":
 		return semver.Patch
 	case "feat":
 		return semver.Minor
