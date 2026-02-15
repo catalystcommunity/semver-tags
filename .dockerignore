@@ -4,3 +4,4 @@ test
 .dockerignore
 skaffold-values.yaml
 skaffold.yaml
+.reactorcide
