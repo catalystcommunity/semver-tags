@@ -21,7 +21,7 @@ var rootCmd = &cobra.Command{
 	which will analyze conventional commits since the last relevant tags and
 	perform the git tags and changelog additions while providing state outputs.
 	Normal LOG_LEVEL env var rule applies, if you want clean output, set it to ERROR
-	and check for the exit code being 0 before you parse.`,
+	and check for the exit code being 0 before you parse outputs.`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
