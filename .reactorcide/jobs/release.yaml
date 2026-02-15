@@ -1,0 +1,58 @@
+name: release
+description: "Tag and create GitHub release on PR merge to main"
+triggers:
+  events:
+    - pull_request_merged
+  branches:
+    - main
+paths:
+  include:
+    - "cmd/**"
+    - "core/**"
+    - "test/**"
+    - "go.mod"
+    - "go.sum"
+job:
+  image: golang:1.20
+  command: |
+    set -e
+
+    # Clone with full history (needed for commit analysis)
+    git clone "https://x-access-token:${GITHUB_PAT}@github.com/${REACTORCIDE_REPO}.git" /workspace
+    cd /workspace
+
+    # Install gh CLI
+    GHCLI_VERSION=2.63.2
+    curl -fsSL "https://github.com/cli/cli/releases/download/v${GHCLI_VERSION}/gh_${GHCLI_VERSION}_linux_amd64.tar.gz" | tar -xz -C /tmp
+    cp "/tmp/gh_${GHCLI_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh
+
+    # Build
+    go build -race
+
+    # Run semver-tags (creates git tags, pushes to origin)
+    OUTPUT=$(./semver-tags run --output_json 2>&1 | tail -1)
+    echo "Output: ${OUTPUT}"
+
+    NEW_TAG=$(echo "${OUTPUT}" | grep -o '"New_release_git_tag":"[^"]*"' | cut -d'"' -f4)
+    PUBLISHED=$(echo "${OUTPUT}" | grep -o '"New_release_published":"[^"]*"' | cut -d'"' -f4)
+
+    if [ "${PUBLISHED}" != "true" ]; then
+      echo "No new release needed."
+      exit 0
+    fi
+
+    # Create release with gh CLI
+    tar -czf semver-tags.tar.gz ./semver-tags
+    GH_TOKEN="${GITHUB_PAT}" gh release create "${NEW_TAG}" \
+      --repo "${REACTORCIDE_REPO}" \
+      --title "${NEW_TAG}" \
+      --notes "Released by Reactorcide CI" \
+      ./semver-tags.tar.gz
+
+    echo "Released ${NEW_TAG}"
+  timeout: 3600
+  priority: 15
+  raw_command: true
+environment:
+  CGO_ENABLED: "1"
+  GITHUB_PAT: "${secret:catalystcommunity/ci:githubpat}"
