@@ -16,7 +16,7 @@ var cfgFile string
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "semver-tags",
-	Short: "Use git tag to add semantic-release style semver tags on conventional commits",
+	Short: "Use git tags to add semantic-release style semver tags on conventional commits",
 	Long: `Calculate the next semver tag to add based on semantic-release style semver tags,
 	which will analyze conventional commits since the last relevant tags and
 	perform the git tags and changelog additions while providing state outputs.
