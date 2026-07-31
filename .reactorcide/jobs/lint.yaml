@@ -1,0 +1,12 @@
+name: lint
+description: "Check formatting and run golangci-lint"
+job:
+  image: containers.catalystsquad.com/public/reactorcide/runnerbase:latest
+  command: "runnerlib run --job-command true"
+  timeout: 1800
+  priority: 10
+  working_dir: /job
+environment:
+  SEMVER_TAGS_CI_JOB: lint
+run_local:
+  user: host

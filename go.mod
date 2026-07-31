@@ -1,6 +1,6 @@
 module github.com/catalystcommunity/semver-tags
 
-go 1.20
+go 1.22
 
 require (
 	github.com/catalystcommunity/app-utils-go v1.0.9

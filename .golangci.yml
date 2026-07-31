@@ -1,0 +1,18 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck      # an unchecked error hides a failure
+    - govet         # the checks that go vet runs
+    - ineffassign   # a value that nothing reads
+    - staticcheck   # correctness and simplification checks
+    - unused        # code that nothing calls
+
+formatters:
+  enable:
+    - gofmt
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
