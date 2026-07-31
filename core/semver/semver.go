@@ -24,7 +24,7 @@ type Semver struct {
 }
 
 func NewSemver(major, minor, patch uint32) *Semver {
-	return &Semver{major, minor, patch, "", ""}
+	return &Semver{Major: major, Minor: minor, Patch: patch}
 }
 
 func (v *Semver) Clone() *Semver {
@@ -32,6 +32,73 @@ func (v *Semver) Clone() *Semver {
 	retVal.PreRelease = v.PreRelease
 	retVal.Build = v.Build
 	return retVal
+}
+
+// Compare gives -1 when v is lower than other, 0 when the two are the same,
+// and 1 when v is higher. It uses semantic version precedence. It ignores the
+// build part, and it puts a pre-release below the related release.
+func (v *Semver) Compare(other *Semver) int {
+	if result := compareNumbers(v.Major, other.Major); result != 0 {
+		return result
+	}
+	if result := compareNumbers(v.Minor, other.Minor); result != 0 {
+		return result
+	}
+	if result := compareNumbers(v.Patch, other.Patch); result != 0 {
+		return result
+	}
+	return comparePreRelease(v.PreRelease, other.PreRelease)
+}
+
+func compareNumbers(left uint32, right uint32) int {
+	switch {
+	case left < right:
+		return -1
+	case left > right:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// comparePreRelease compares two pre-release parts. An empty pre-release is
+// higher than any pre-release, because 1.0.0 comes after 1.0.0-rc.1.
+func comparePreRelease(left string, right string) int {
+	if left == right {
+		return 0
+	}
+	if left == "" {
+		return 1
+	}
+	if right == "" {
+		return -1
+	}
+
+	leftParts := strings.Split(left, ".")
+	rightParts := strings.Split(right, ".")
+	for index := 0; index < len(leftParts) && index < len(rightParts); index++ {
+		if result := compareIdentifiers(leftParts[index], rightParts[index]); result != 0 {
+			return result
+		}
+	}
+	return compareNumbers(uint32(len(leftParts)), uint32(len(rightParts)))
+}
+
+// compareIdentifiers compares one part of a pre-release. A part that holds
+// only digits is lower than a part that holds text.
+func compareIdentifiers(left string, right string) int {
+	leftNumber, leftErr := strconv.Atoi(left)
+	rightNumber, rightErr := strconv.Atoi(right)
+	switch {
+	case leftErr == nil && rightErr == nil:
+		return compareNumbers(uint32(leftNumber), uint32(rightNumber))
+	case leftErr == nil:
+		return -1
+	case rightErr == nil:
+		return 1
+	default:
+		return strings.Compare(left, right)
+	}
 }
 
 // The only "logic" function, you have to pass in everything that could matter and it will bump appropriately

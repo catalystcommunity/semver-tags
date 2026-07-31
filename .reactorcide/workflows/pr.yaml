@@ -1,0 +1,34 @@
+name: Semver Tags PR
+description: "Validate commits, then build, test, and dry run semver-tags for pull requests."
+
+# One event can match several workflows, so each workflow shows as its own
+# named check on the pull request.
+on:
+  events:
+    - pull_request_opened
+    - pull_request_updated
+  branches:
+    - main
+
+# Each job references a reusable definition in .reactorcide/jobs/ and adds the
+# workflow order. The build jobs run only after the commit format is valid.
+jobs:
+  conventional-commits:
+    job_file: conventional-commits.yaml
+
+  test-go:
+    job_file: test-go.yaml
+    depends_on:
+      - conventional-commits
+
+  # The linter runs beside the tests, because it is slower to install and
+  # nothing after it depends on its result.
+  lint:
+    job_file: lint.yaml
+    depends_on:
+      - conventional-commits
+
+  dry-run:
+    job_file: dry-run.yaml
+    depends_on:
+      - test-go

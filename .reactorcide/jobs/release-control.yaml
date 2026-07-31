@@ -1,0 +1,11 @@
+name: release-control
+description: "Tag, prepare, or publish a coordinated semver-tags release"
+job:
+  image: containers.catalystsquad.com/public/reactorcide/runnerbase:latest
+  command: "runnerlib run --job-command true"
+  timeout: 900
+  priority: 15
+  working_dir: /job
+  disable_run_local: true
+environment:
+  GITHUB_PAT: "${secret:catalystcommunity/ci:githubpat}"
