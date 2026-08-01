@@ -6,8 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/catalystcommunity/app-utils-go/logging"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -20,6 +23,7 @@ type TaggingSuite struct {
 	repoDir     string
 	previousDir string
 	commitCount int
+	lastOutput  string
 }
 
 func TestTaggingSuite(t *testing.T) {
@@ -31,6 +35,7 @@ func (s *TaggingSuite) SetupTest() {
 	require.NoError(s.T(), err)
 	s.previousDir = previousDir
 	s.commitCount = 0
+	s.lastOutput = ""
 
 	// macOS puts the temporary directory behind a symlink, and git reports the
 	// resolved path, so resolve it here to keep the two paths comparable.
@@ -133,9 +138,12 @@ func (s *TaggingSuite) runTagging(config Config) Outputs {
 
 	content, err := os.ReadFile(capturePath)
 	require.NoError(s.T(), err)
+	s.lastOutput = string(content)
+	jsonStart := strings.LastIndex(s.lastOutput, `{"New_release_published"`)
+	require.NotEqual(s.T(), -1, jsonStart)
 
 	outputs := Outputs{}
-	require.NoError(s.T(), json.Unmarshal(content, &outputs))
+	require.NoError(s.T(), json.Unmarshal([]byte(s.lastOutput[jsonStart:]), &outputs))
 	return outputs
 }
 
@@ -412,6 +420,82 @@ func (s *TaggingSuite) TestMultipleNamedTagsUseOneAtomicPush() {
 		require.NoError(s.T(), err)
 		assert.Equal(s.T(), s.headCommit(), string(content[:40]))
 	}
+	for _, tag := range []string{"public-api/v0.1", "public-api/v0"} {
+		check := exec.Command("git", "--git-dir", remoteDir, "show-ref", "--verify", "refs/tags/"+tag)
+		assert.Error(s.T(), check.Run())
+	}
+}
+
+func (s *TaggingSuite) TestShortVersionsMoveMajorAndMinorTags() {
+	firstHead := s.headCommit()
+	s.git("tag", "api/v1.3.6")
+	s.git("tag", "api/v1.3")
+	s.git("tag", "api/v1")
+
+	remoteDir := filepath.Join(s.T().TempDir(), "remote.git")
+	command := exec.Command("git", "init", "-q", "--bare", remoteDir)
+	require.NoError(s.T(), command.Run())
+	s.git("remote", "add", "origin", remoteDir)
+	s.git("push", "-q", "origin", "api/v1.3.6", "api/v1.3", "api/v1")
+
+	s.write("services/api/file.txt", "api change")
+	s.commit("fix: api change")
+	newHead := s.headCommit()
+	require.NotEqual(s.T(), firstHead, newHead)
+
+	outputs := s.runTagging(Config{
+		OutputJson:    true,
+		Atomic:        true,
+		Remote:        "origin",
+		Branch:        "",
+		ShortVersions: true,
+		Directories:   []string{"services/api"},
+	})
+
+	assert.Equal(s.T(), "api/v1.3.7", outputs.NewReleaseGitTag)
+	for _, tag := range []string{"api/v1.3.7", "api/v1.3", "api/v1"} {
+		check := exec.Command("git", "--git-dir", remoteDir, "rev-parse", "refs/tags/"+tag)
+		content, err := check.Output()
+		require.NoError(s.T(), err)
+		assert.Equal(s.T(), newHead, string(content[:40]))
+	}
+}
+
+func (s *TaggingSuite) TestShortVersionFlagsCannotConflict() {
+	err := DoTagging(Config{ShortVersions: true, SkipShortVersions: true})
+
+	require.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), "cannot both be true")
+}
+
+func (s *TaggingSuite) TestDefaultShortVersionBehaviorWritesMigrationWarning() {
+	s.targetDryRun([]TargetConfig{{Name: "public-api", Paths: []string{"services/api"}}})
+
+	assert.Contains(s.T(), s.lastOutput, "Short version tags will become the default")
+	assert.Contains(s.T(), s.lastOutput, "--skip-short-versions")
+}
+
+func (s *TaggingSuite) TestSkipShortVersionsSuppressesMigrationWarning() {
+	s.runTagging(Config{
+		DryRun:            true,
+		OutputJson:        true,
+		SkipShortVersions: true,
+		Targets: []TargetConfig{{
+			Name: "public-api", Paths: []string{"services/api"},
+		}},
+	})
+
+	assert.NotContains(s.T(), s.lastOutput, "Short version tags will become the default")
+}
+
+func (s *TaggingSuite) TestErrorLogLevelSuppressesMigrationWarning() {
+	previousLevel := logging.Log.GetLevel()
+	logging.Log.SetLevel(logrus.ErrorLevel)
+	s.T().Cleanup(func() { logging.Log.SetLevel(previousLevel) })
+
+	s.targetDryRun([]TargetConfig{{Name: "public-api", Paths: []string{"services/api"}}})
+
+	assert.NotContains(s.T(), s.lastOutput, "Short version tags will become the default")
 }
 
 // A --directories value keeps its old meaning. It is one literal path, even
@@ -645,6 +729,30 @@ func (s *TaggingSuite) TestAllowedTypesLimitsWhatReleases() {
 
 	assert.Equal(s.T(), "false", outputs.NewReleasePublished)
 	assert.Equal(s.T(), "api/v1.0.0", outputs.NewReleaseGitTag)
+}
+
+func (s *TaggingSuite) TestArbitraryConfiguredTypeReleases() {
+	s.write("services/api/file.txt", "api change")
+	s.commit("holiday: bring joy")
+
+	outputs := s.runTagging(Config{
+		DryRun:      true,
+		OutputJson:  true,
+		PatchTypes:  []string{"holiday"},
+		Directories: []string{"services/api"},
+	})
+
+	assert.Equal(s.T(), "true", outputs.NewReleasePublished)
+	assert.Equal(s.T(), "api/v1.0.1", outputs.NewReleaseGitTag)
+}
+
+func (s *TaggingSuite) TestBreakingChangeFooterReleasesMajorVersion() {
+	s.write("services/api/file.txt", "api change")
+	s.commit("holiday: change the api\n\nBREAKING CHANGE: old clients cannot connect")
+
+	outputs := s.tagDryRun([]string{"services/api"}, nil)
+
+	assert.Equal(s.T(), "api/v2.0.0", outputs.NewReleaseGitTag)
 }
 
 func (s *TaggingSuite) TestCiAndPerfCommitsRelease() {

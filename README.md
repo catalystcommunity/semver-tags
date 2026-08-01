@@ -98,18 +98,44 @@ multiple paths when the first path basename is the required tag name.
 
 ## Commit Types
 
-The command reads conventional commits. A `feat` commit increases the minor
-version. Each other known type increases the patch version. A `!` after the
-type, and a `BREAKING CHANGE:` subject, increase the major version.
+The command reads [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+A `fix` commit increases the patch version. A `feat` commit increases the minor
+version. These two bump levels are fixed.
 
-The known types are `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`,
-`refactor`, `revert`, `style`, and `test`. Use `--allowed_types` to make the
-list shorter. A commit with a type outside the list does not change the
-version.
+A `!` after the type or scope increases the major version. A
+`BREAKING CHANGE:` or `BREAKING-CHANGE:` footer also increases the major
+version. `BREAKING CHANGE` is in the default allowed-type list.
+
+By default, these types make a patch release: `build`, `chore`, `ci`, `docs`,
+`fix`, `perf`, `refactor`, `revert`, `style`, and `test`. The `feat` type makes
+a minor release. No ordinary type makes a major release by default.
+
+Use `--patch_types`, `--minor_types`, and `--major_types` to configure other
+types. Each flag is repeatable and also accepts comma-separated values. A value
+replaces the default list for that level. The command always adds `fix` to the
+patch list and `feat` to the minor list.
 
 ```sh
-semver-tags run --allowed_types fix --allowed_types feat
+semver-tags run \
+  --patch_types "fix,holiday" \
+  --minor_types "feat,meatball" \
+  --major_types earthquake
 ```
+
+This example makes `holiday` a patch change, `meatball` a minor change, and
+`earthquake` a major change.
+
+Use `--allowed_types` to limit the configured types that can change a version.
+A commit with a type outside this list does not change the version. If you do
+not set `allowed_types`, all configured types and `BREAKING CHANGE` are
+allowed.
+
+```sh
+semver-tags run --allowed_types fix --allowed_types "holiday,BREAKING CHANGE"
+```
+
+If you set `allowed_types`, include `BREAKING CHANGE` to permit breaking
+markers.
 
 ## Configuration File
 
@@ -118,6 +144,21 @@ that `--config` names. Each key is a flag name.
 
 ```yaml
 dry_run: true
+patch_types:
+  - fix
+  - holiday
+minor_types:
+  - feat
+  - meatball
+major_types:
+  - earthquake
+allowed_types:
+  - fix
+  - feat
+  - holiday
+  - meatball
+  - earthquake
+  - BREAKING CHANGE
 directories:
   - services/api
 dir_group:
@@ -134,7 +175,8 @@ A flag on the command line replaces the value in the file.
 ## Environment Variables
 
 Each flag also reads an environment variable. The variable name is the flag
-name in capital letters. A flag on the command line replaces the variable.
+name in capital letters. An underscore replaces a hyphen. A flag on the
+command line replaces the variable.
 
 ```sh
 DRY_RUN=true BRANCH=main semver-tags run
@@ -175,6 +217,20 @@ Command-line `--target` values replace `TARGETS` and file `targets` values.
 A path with a space does not work in `DIRECTORIES` or `DIR_GROUP`. Use the
 flags for that path.
 
+The commit-type settings also have environment variables. A space separates
+their values:
+
+```sh
+PATCH_TYPES="fix holiday" \
+MINOR_TYPES="feat meatball" \
+MAJOR_TYPES="earthquake" \
+ALLOWED_TYPES="fix feat holiday meatball earthquake BREAKING-CHANGE" \
+  semver-tags run
+```
+
+The environment form uses `BREAKING-CHANGE` as an alias because
+`BREAKING CHANGE` contains a space.
+
 ## Outputs
 
 The command writes one JSON object. Each field holds one value for each group,
@@ -193,6 +249,38 @@ the command pushes nothing.
 By default the command also pushes the branch that `--branch` names. Set
 `--branch ""` to push only the tags. Use this in a CI job that checked out a
 commit instead of a branch.
+
+## Short Version Tags
+
+Use `--short-versions` to update mutable major and minor tags. A release tag of
+`v1.3.7` also updates `v1.3` and `v1`. A package release of `api/v1.3.7` also
+updates `api/v1.3` and `api/v1`.
+
+```sh
+semver-tags run --short-versions
+```
+
+The command force-updates short tags because they move to each new release.
+It sends the full tag and the short tags in the same atomic push when
+`--atomic` is true. Output fields continue to contain the full version tag.
+
+Short tags are off by default in this major version. They will be on by
+default in the next major version. When neither short-version flag is set, the
+command writes a migration warning to standard output. Use
+`--skip-short-versions` to keep only full tags and suppress this warning. You
+can also set `LOG_LEVEL=ERROR` to suppress the warning. Set one of these values
+before you parse JSON output.
+
+```sh
+semver-tags run --skip-short-versions
+```
+
+The `--skip-short-versions` flag will remain available in the next major
+version. It will not remain available in later major versions. Do not use
+`--short-versions` and `--skip-short-versions` together.
+
+The configuration-file keys are `short_versions` and `skip_short_versions`.
+The environment variables are `SHORT_VERSIONS` and `SKIP_SHORT_VERSIONS`.
 
 ## Continuous Integration
 

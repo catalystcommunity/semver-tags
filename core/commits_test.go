@@ -46,13 +46,16 @@ func TestAnalyzeCommitMessageHonorsAllowedTypes(t *testing.T) {
 	assert.Equal(t, semver.NotConventional, AnalyzeCommitMessage("ci: change it", allowed))
 }
 
-// A breaking change is major even when its type is not allowed, because
-// dropping it would hide an incompatible change.
-func TestAnalyzeCommitMessageAlwaysTakesBreakingChange(t *testing.T) {
+func TestAnalyzeCommitMessageFiltersBreakingChanges(t *testing.T) {
+	assert.Equal(
+		t,
+		semver.NotConventional,
+		AnalyzeCommitMessage("BREAKING CHANGE: break it", []string{"fix"}),
+	)
 	assert.Equal(
 		t,
 		semver.Major,
-		AnalyzeCommitMessage("BREAKING CHANGE: break it", []string{"fix"}),
+		AnalyzeCommitMessage("BREAKING CHANGE: break it", []string{BreakingChangeType}),
 	)
 }
 
@@ -66,9 +69,84 @@ func TestDefaultAllowedTypesIsSortedAndComplete(t *testing.T) {
 	types := DefaultAllowedTypes()
 
 	assert.Equal(t, []string{
-		"build", "chore", "ci", "docs", "feat",
+		BreakingChangeType, "build", "chore", "ci", "docs", "feat",
 		"fix", "perf", "refactor", "revert", "style", "test",
 	}, types)
+}
+
+func TestConfiguredCommitTypesCanUseEveryBumpLevel(t *testing.T) {
+	rules, err := newBumpRules(Config{
+		PatchTypes: []string{"holiday"},
+		MinorTypes: []string{"meatball"},
+		MajorTypes: []string{"earthquake"},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, semver.Patch, analyzeCommitMessage("holiday: celebrate", rules))
+	assert.Equal(t, semver.Minor, analyzeCommitMessage("meatball: add sauce", rules))
+	assert.Equal(t, semver.Major, analyzeCommitMessage("earthquake: move it", rules))
+	assert.Equal(t, semver.Patch, analyzeCommitMessage("fix: repair it", rules))
+	assert.Equal(t, semver.Minor, analyzeCommitMessage("feat: add it", rules))
+}
+
+func TestConfiguredCommitTypesAcceptCommaSeparatedValues(t *testing.T) {
+	rules, err := newBumpRules(Config{PatchTypes: []string{"holiday,meatball"}})
+	require.NoError(t, err)
+
+	assert.Equal(t, semver.Patch, analyzeCommitMessage("holiday: celebrate", rules))
+	assert.Equal(t, semver.Patch, analyzeCommitMessage("meatball: add sauce", rules))
+}
+
+func TestAllowedTypesFilterConfiguredTypes(t *testing.T) {
+	rules, err := newBumpRules(Config{
+		PatchTypes:   []string{"holiday", "meatball"},
+		AllowedTypes: []string{"holiday"},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, semver.Patch, analyzeCommitMessage("holiday: celebrate", rules))
+	assert.Equal(t, semver.NotConventional, analyzeCommitMessage("meatball: add sauce", rules))
+	assert.Equal(t, semver.NotConventional, analyzeCommitMessage("fix: repair it", rules))
+}
+
+func TestBreakingChangeAllowedTypeAcceptsHyphenatedAlias(t *testing.T) {
+	rules, err := newBumpRules(Config{AllowedTypes: []string{"BREAKING-CHANGE"}})
+	require.NoError(t, err)
+
+	assert.Equal(t, semver.Major, analyzeCommitMessage("fix!: break it", rules))
+}
+
+func TestFixAndFeatBumpLevelsCannotChange(t *testing.T) {
+	_, err := newBumpRules(Config{MinorTypes: []string{"fix"}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must make a patch release")
+
+	_, err = newBumpRules(Config{PatchTypes: []string{"feat"}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must make a minor release")
+}
+
+func TestOneTypeCannotUseTwoBumpLevels(t *testing.T) {
+	_, err := newBumpRules(Config{
+		PatchTypes: []string{"holiday"},
+		MinorTypes: []string{"holiday"},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "more than one version level")
+}
+
+func TestBreakingChangeFooterMakesAMajorBump(t *testing.T) {
+	rules, err := newBumpRules(Config{})
+	require.NoError(t, err)
+
+	message := "holiday: change everything\n\nBREAKING CHANGE: old clients cannot connect"
+	assert.Equal(t, semver.Major, analyzeCommitMessage(message, rules))
+	assert.Equal(
+		t,
+		semver.Major,
+		analyzeCommitMessage("holiday!: change everything", rules),
+	)
 }
 
 func TestParseVersionInfo(t *testing.T) {

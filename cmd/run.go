@@ -59,9 +59,25 @@ flag for more targets.
 The first target can make public-api/v1.2.3. A commit in libs/shared affects
 both targets. A target path can name a file or a directory.
 
-The outputs hold one value for each group or target, separated by commas. The order is
-every --directories value first, then every --dir_group value, and then every
---target value.`,
+The fix type always makes a patch release. The feat type always makes a minor
+release. Use --patch_types, --minor_types, and --major_types to configure other
+types. For example:
+
+  semver-tags run --patch_types fix --patch_types holiday
+
+Use --allowed_types to limit which configured types can make a release. The
+flag is repeatable and also accepts comma-separated values. BREAKING CHANGE is
+allowed by default and makes a major release.
+
+Use --short-versions to update mutable major and minor tags with each release.
+For v1.3.7, the command also updates v1.3 and v1. This behavior will become the
+default in the next major version. Until then, the command writes a migration
+warning when neither short-version flag is set. Use --skip-short-versions to
+keep only full tags and suppress the warning.
+
+The outputs hold one value for each group or target, separated by commas. The
+order is every --directories value first, then every --dir_group value, and
+then every --target value.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		config, err := initRunConfig(cmd)
 		if err != nil {
@@ -82,7 +98,12 @@ func init() {
 	runCmd.PersistentFlags().String("build_string", "", "the string that represents the build part of the semver")
 	runCmd.PersistentFlags().String("remote", "origin", "the name of the remote to push to")
 	runCmd.PersistentFlags().String("branch", "main", "the name of the branch to push to, set it empty to push only the tags")
-	runCmd.PersistentFlags().StringArray("allowed_types", core.DefaultAllowedTypes(), "the conventional commit types that change a version, a type outside the list changes nothing")
+	runCmd.PersistentFlags().StringArray("allowed_types", []string{}, "the commit types that can change a version, repeat the flag or use commas, defaults to all configured types and BREAKING CHANGE")
+	runCmd.PersistentFlags().StringArray("patch_types", core.DefaultPatchTypes(), "the commit types that make a patch release, repeat the flag or use commas; fix always makes a patch release")
+	runCmd.PersistentFlags().StringArray("minor_types", core.DefaultMinorTypes(), "the commit types that make a minor release, repeat the flag or use commas; feat always makes a minor release")
+	runCmd.PersistentFlags().StringArray("major_types", core.DefaultMajorTypes(), "the commit types that make a major release, repeat the flag or use commas")
+	runCmd.PersistentFlags().Bool("short-versions", false, "also update mutable vMAJOR.MINOR and vMAJOR tags")
+	runCmd.PersistentFlags().Bool("skip-short-versions", false, "keep full version tags only and suppress the short-version migration warning")
 	runCmd.PersistentFlags().StringArray("directories", []string{}, "one subdirectory to apply its own tag for, named after the last part of the path, repeat the flag for more tags, which makes github action outputs comma separated")
 	runCmd.PersistentFlags().StringArray("dir_group", []string{}, "a comma separated list of subdirectories that share one tag, named after the first directory in the list, repeat the flag for more tag groups, which makes github action outputs comma separated")
 	runCmd.PersistentFlags().StringArray("target", []string{}, "a named release target in name=path[,path...] form, repeat the flag for more targets")
@@ -93,6 +114,15 @@ func init() {
 	if err != nil {
 		logging.Log.WithError(err).Error("error initializing configuration")
 		panic(err)
+	}
+	for key, flagName := range map[string]string{
+		"short_versions":      "short-versions",
+		"skip_short_versions": "skip-short-versions",
+	} {
+		if err := viper.BindPFlag(key, runCmd.PersistentFlags().Lookup(flagName)); err != nil {
+			logging.Log.WithError(err).Error("error initializing configuration")
+			panic(err)
+		}
 	}
 }
 
@@ -109,8 +139,14 @@ func resolveTargetConfigs(cmd *cobra.Command) ([]core.TargetConfig, error) {
 		return core.ParseTargetSpecifications(strings.Fields(value))
 	}
 
+	return configuredTargets(viper.UnmarshalKey)
+}
+
+func configuredTargets(
+	unmarshalKey func(string, any, ...viper.DecoderConfigOption) error,
+) ([]core.TargetConfig, error) {
 	var targets []core.TargetConfig
-	if err := viper.UnmarshalKey("targets", &targets); err != nil {
+	if err := unmarshalKey("targets", &targets); err != nil {
 		return nil, fmt.Errorf("can not read targets from the configuration file: %w", err)
 	}
 	return targets, nil
@@ -123,18 +159,23 @@ func initRunConfig(cmd *cobra.Command) (core.Config, error) {
 	}
 
 	config := core.Config{
-		DryRun:           viper.GetBool("dry_run"),
-		GithubAction:     viper.GetBool("github_action"),
-		OutputJson:       viper.GetBool("output_json"),
-		Atomic:           viper.GetBool("atomic"),
-		PreReleaseString: viper.GetString("pre_release_string"),
-		BuildString:      viper.GetString("build_string"),
-		Remote:           viper.GetString("remote"),
-		Branch:           viper.GetString("branch"),
-		AllowedTypes:     viper.GetStringSlice("allowed_types"),
-		Directories:      viper.GetStringSlice("directories"),
-		DirGroups:        viper.GetStringSlice("dir_group"),
-		Targets:          targets,
+		DryRun:            viper.GetBool("dry_run"),
+		GithubAction:      viper.GetBool("github_action"),
+		OutputJson:        viper.GetBool("output_json"),
+		Atomic:            viper.GetBool("atomic"),
+		PreReleaseString:  viper.GetString("pre_release_string"),
+		BuildString:       viper.GetString("build_string"),
+		Remote:            viper.GetString("remote"),
+		Branch:            viper.GetString("branch"),
+		AllowedTypes:      viper.GetStringSlice("allowed_types"),
+		PatchTypes:        viper.GetStringSlice("patch_types"),
+		MinorTypes:        viper.GetStringSlice("minor_types"),
+		MajorTypes:        viper.GetStringSlice("major_types"),
+		ShortVersions:     viper.GetBool("short_versions"),
+		SkipShortVersions: viper.GetBool("skip_short_versions"),
+		Directories:       viper.GetStringSlice("directories"),
+		DirGroups:         viper.GetStringSlice("dir_group"),
+		Targets:           targets,
 	}
 
 	logging.Log.WithField("settings", fmt.Sprintf("%+v", config)).Debug("viper settings")

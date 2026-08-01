@@ -4,29 +4,54 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/catalystcommunity/app-utils-go/logging"
+	"github.com/sirupsen/logrus"
 )
+
+const shortVersionWarning = "WARNING: Short version tags will become the default in the next major version. " +
+	"Use --short-versions to enable them now or --skip-short-versions to keep the current behavior " +
+	"without this warning. --skip-short-versions will be removed after the next major version."
 
 // Config holds every setting of one tagging run.
 type Config struct {
-	DryRun           bool
-	GithubAction     bool
-	OutputJson       bool
-	Atomic           bool
-	PreReleaseString string
-	BuildString      string
-	Remote           string
-	Branch           string
-	AllowedTypes     []string
-	Directories      []string
-	DirGroups        []string
-	Targets          []TargetConfig
+	DryRun            bool
+	GithubAction      bool
+	OutputJson        bool
+	Atomic            bool
+	PreReleaseString  string
+	BuildString       string
+	Remote            string
+	Branch            string
+	AllowedTypes      []string
+	PatchTypes        []string
+	MinorTypes        []string
+	MajorTypes        []string
+	ShortVersions     bool
+	SkipShortVersions bool
+	Directories       []string
+	DirGroups         []string
+	Targets           []TargetConfig
 }
 
 // DoTagging works out the next version of each directory group, makes the
 // tags, and writes the outputs.
 func DoTagging(config Config) error {
+	if config.ShortVersions && config.SkipShortVersions {
+		return errors.New("short_versions and skip_short_versions cannot both be true")
+	}
+	if !config.ShortVersions && !config.SkipShortVersions &&
+		logging.Log.IsLevelEnabled(logrus.WarnLevel) {
+		if _, err := fmt.Fprintln(os.Stdout, shortVersionWarning); err != nil {
+			return fmt.Errorf("can not write the short-version migration warning: %w", err)
+		}
+	}
+	rules, err := newBumpRules(config)
+	if err != nil {
+		return err
+	}
+
 	// Make sure we're in a git repo with a git command or this is pointless
 	if !IsGitRepo() {
 		return errors.New("current directory is not a git repo, nothing to do")
@@ -52,7 +77,7 @@ func DoTagging(config Config) error {
 		return err
 	}
 
-	run := &tagger{config: config, head: head}
+	run := &tagger{config: config, rules: rules, head: head}
 	for idx := range results {
 		// Get the latest tag and hash that applies for this directory
 		results[idx].LastVersion, err = run.latestVersion(results[idx])
@@ -68,6 +93,7 @@ func DoTagging(config Config) error {
 
 	// Process what tags we should be making
 	var newTags []string
+	var shortTags []string
 	for _, result := range results {
 		if result.NextVersion == nil ||
 			result.LastVersion.Version.FormattedString() == result.NextVersion.Version.FormattedString() {
@@ -89,6 +115,20 @@ func DoTagging(config Config) error {
 			}
 		}
 		newTags = append(newTags, tag)
+
+		if config.ShortVersions {
+			for _, shortTag := range shortTagsFor(result.NextVersion) {
+				if config.DryRun {
+					logging.Log.Info(fmt.Sprintf("We would be updating a short version tag: %s", shortTag))
+				} else {
+					logging.Log.Info(fmt.Sprintf("Updating short version tag: %s", shortTag))
+					if err := updateTag(shortTag); err != nil {
+						return err
+					}
+				}
+				shortTags = append(shortTags, shortTag)
+			}
+		}
 	}
 
 	outputs, err := GenerateOutputs(results, config.DryRun)
@@ -100,7 +140,7 @@ func DoTagging(config Config) error {
 	// All tags should be there, so push! This prevents tags being pushed if
 	// there were errors. Ex. cmd: git push --atomic origin main tagOne tagTwo
 	if !config.DryRun && len(newTags) > 0 {
-		if err := pushTags(config.Remote, config.Branch, config.Atomic, newTags); err != nil {
+		if err := pushTags(config.Remote, config.Branch, config.Atomic, newTags, shortTags); err != nil {
 			return err
 		}
 	}

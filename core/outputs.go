@@ -48,6 +48,19 @@ func tagFor(version *VersionInfo) string {
 	return version.Package + "/" + version.Version.FormattedString()
 }
 
+// shortTagsFor gives the mutable major and minor tags for one full release
+// tag. These tags point to the same commit as the full release tag.
+func shortTagsFor(version *VersionInfo) []string {
+	prefix := ""
+	if version.Package != "" {
+		prefix = version.Package + "/"
+	}
+	return []string{
+		fmt.Sprintf("%sv%d.%d", prefix, version.Version.Major, version.Version.Minor),
+		fmt.Sprintf("%sv%d", prefix, version.Version.Major),
+	}
+}
+
 // releaseNotesJson makes a JSON object with the notes of each package. It
 // keeps the order of the groups, which a JSON object of a Go map would not.
 func releaseNotesJson(results []DirectoryVersionInfo) (string, error) {
