@@ -101,16 +101,32 @@ func repositoryTagLines() ([]string, error) {
 	return lines, nil
 }
 
-// commitSubjects gives the subject of each commit after the given commit that
-// changed one of the given paths.
-func commitSubjects(afterCommit string, paths []string) ([]string, error) {
-	args := []string{"log", "--pretty=format:%s", fmt.Sprintf("%s..HEAD", afterCommit), "--"}
+type commitMessage struct {
+	Subject string
+	Message string
+}
+
+// commitMessages gives the subject and full message of each commit after the
+// given commit that changed one of the given paths.
+func commitMessages(afterCommit string, paths []string) ([]commitMessage, error) {
+	args := []string{"log", "-z", "--pretty=format:%s%x00%B", fmt.Sprintf("%s..HEAD", afterCommit), "--"}
 	args = append(args, paths...)
-	subjects, err := gitLines(args...)
+	output, err := runGit(args...)
 	if err != nil {
 		return nil, fmt.Errorf("can not get git commits: %w", err)
 	}
-	return subjects, nil
+
+	parts := strings.Split(output, "\x00")
+	commits := make([]commitMessage, 0, len(parts)/2)
+	for index := 0; index+1 < len(parts); index += 2 {
+		subject := strings.TrimSuffix(parts[index], "\n")
+		message := strings.TrimSuffix(parts[index+1], "\n")
+		if subject == "" && message == "" {
+			continue
+		}
+		commits = append(commits, commitMessage{Subject: subject, Message: message})
+	}
+	return commits, nil
 }
 
 // createTag makes one local tag at HEAD.
@@ -121,10 +137,24 @@ func createTag(tag string) error {
 	return nil
 }
 
+// updateTag makes a local tag at HEAD or moves an existing local tag to HEAD.
+func updateTag(tag string) error {
+	if _, err := runGit("tag", "--force", tag); err != nil {
+		return fmt.Errorf("error updating tag: %w", err)
+	}
+	return nil
+}
+
 // pushTags sends the new tags to the remote. An empty branch pushes only the
 // tags, which is what a job that checked out a commit instead of a branch
 // needs. The atomic option makes the remote take all of the tags or none.
-func pushTags(remote string, branch string, atomic bool, tags []string) error {
+func pushTags(
+	remote string,
+	branch string,
+	atomic bool,
+	tags []string,
+	forceTags []string,
+) error {
 	args := []string{"push"}
 	if atomic {
 		args = append(args, "--atomic")
@@ -134,6 +164,9 @@ func pushTags(remote string, branch string, atomic bool, tags []string) error {
 		args = append(args, branch)
 	}
 	args = append(args, tags...)
+	for _, tag := range forceTags {
+		args = append(args, "+refs/tags/"+tag+":refs/tags/"+tag)
+	}
 
 	if _, err := runGit(args...); err != nil {
 		return fmt.Errorf("error pushing tags: %w", err)

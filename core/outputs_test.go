@@ -53,6 +53,20 @@ func TestGenerateOutputsForOneGroup(t *testing.T) {
 	assert.Equal(t, "feat: a thing", outputs.NewReleaseNotes)
 }
 
+func TestShortTagsForPackageVersion(t *testing.T) {
+	info, err := ParseVersionInfo("api/v1.3.7,hash")
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"api/v1.3", "api/v1"}, shortTagsFor(info))
+}
+
+func TestShortTagsForWholeRepositoryVersion(t *testing.T) {
+	info, err := ParseVersionInfo("v1.3.7,hash")
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"v1.3", "v1"}, shortTagsFor(info))
+}
+
 func TestGenerateOutputsJoinsGroupsInOrder(t *testing.T) {
 	results := []DirectoryVersionInfo{
 		group("api", "v1.0.0", "v1.1.0", []string{"feat: a thing"}),

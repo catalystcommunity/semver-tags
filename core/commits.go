@@ -10,6 +10,8 @@ import (
 	"github.com/catalystcommunity/semver-tags/core/semver"
 )
 
+const BreakingChangeType = "BREAKING CHANGE"
+
 // VersionInfo holds one version of one package, and the commit it points at.
 type VersionInfo struct {
 	Package    string
@@ -29,66 +31,174 @@ func (v *VersionInfo) Printable() string {
 	return retVal
 }
 
-// bumpForType gives the version part that each conventional commit type
-// changes. A type that is not in this list does not change the version.
-var bumpForType = map[string]semver.CommitType{
-	"build":    semver.Patch,
-	"chore":    semver.Patch,
-	"ci":       semver.Patch,
-	"docs":     semver.Patch,
-	"feat":     semver.Minor,
-	"fix":      semver.Patch,
-	"perf":     semver.Patch,
-	"refactor": semver.Patch,
-	"revert":   semver.Patch,
-	"style":    semver.Patch,
-	"test":     semver.Patch,
+// defaultPatchTypes gives the commit types that make a patch release when the
+// caller does not configure the patch list.
+var defaultPatchTypes = []string{
+	"build", "chore", "ci", "docs", "fix", "perf", "refactor", "revert", "style", "test",
+}
+
+var defaultMinorTypes = []string{"feat"}
+
+// DefaultPatchTypes gives the commit types that make a patch release by
+// default.
+func DefaultPatchTypes() []string {
+	return slices.Clone(defaultPatchTypes)
+}
+
+// DefaultMinorTypes gives the commit types that make a minor release by
+// default.
+func DefaultMinorTypes() []string {
+	return slices.Clone(defaultMinorTypes)
+}
+
+// DefaultMajorTypes gives the commit types that make a major release by
+// default. A breaking marker makes a major release separately from this list.
+func DefaultMajorTypes() []string {
+	return []string{}
 }
 
 // DefaultAllowedTypes gives the conventional commit types that change a
 // version when the caller does not give a list.
 func DefaultAllowedTypes() []string {
-	types := make([]string, 0, len(bumpForType))
-	for name := range bumpForType {
-		types = append(types, name)
-	}
+	types := append(DefaultPatchTypes(), DefaultMinorTypes()...)
+	types = append(types, BreakingChangeType)
 	sort.Strings(types)
 	return types
 }
 
-// AnalyzeCommitMessage gives the version part that one commit subject changes.
-// A type that is not in allowedTypes changes nothing. An empty allowedTypes
-// means the default list, so a wrong setting can not stop every release.
-func AnalyzeCommitMessage(message string, allowedTypes []string) semver.CommitType {
-	typeAndScope, _, found := strings.Cut(message, ":")
+type bumpRules struct {
+	levels  map[string]semver.CommitType
+	allowed map[string]struct{}
+}
+
+func normalizeTypeList(values []string) []string {
+	var normalized []string
+	for _, value := range values {
+		for _, member := range strings.Split(value, ",") {
+			member = strings.TrimSpace(member)
+			if member == "" {
+				continue
+			}
+			if strings.EqualFold(member, BreakingChangeType) ||
+				strings.EqualFold(member, "BREAKING-CHANGE") {
+				member = BreakingChangeType
+			} else {
+				member = strings.ToLower(member)
+			}
+			if !slices.Contains(normalized, member) {
+				normalized = append(normalized, member)
+			}
+		}
+	}
+	return normalized
+}
+
+func newBumpRules(config Config) (bumpRules, error) {
+	patchTypes := normalizeTypeList(config.PatchTypes)
+	if len(patchTypes) == 0 {
+		patchTypes = DefaultPatchTypes()
+	}
+	minorTypes := normalizeTypeList(config.MinorTypes)
+	if len(minorTypes) == 0 {
+		minorTypes = DefaultMinorTypes()
+	}
+	majorTypes := normalizeTypeList(config.MajorTypes)
+
+	if slices.Contains(minorTypes, "fix") || slices.Contains(majorTypes, "fix") {
+		return bumpRules{}, fmt.Errorf("commit type %q must make a patch release", "fix")
+	}
+	if slices.Contains(patchTypes, "feat") || slices.Contains(majorTypes, "feat") {
+		return bumpRules{}, fmt.Errorf("commit type %q must make a minor release", "feat")
+	}
+	if !slices.Contains(patchTypes, "fix") {
+		patchTypes = append(patchTypes, "fix")
+	}
+	if !slices.Contains(minorTypes, "feat") {
+		minorTypes = append(minorTypes, "feat")
+	}
+
+	rules := bumpRules{levels: map[string]semver.CommitType{}}
+	addTypes := func(values []string, level semver.CommitType) error {
+		for _, value := range values {
+			if value == BreakingChangeType {
+				return fmt.Errorf("%q is a breaking marker and cannot be a configured commit type", value)
+			}
+			if previous, found := rules.levels[value]; found && previous != level {
+				return fmt.Errorf("commit type %q is configured for more than one version level", value)
+			}
+			rules.levels[value] = level
+		}
+		return nil
+	}
+	if err := addTypes(patchTypes, semver.Patch); err != nil {
+		return bumpRules{}, err
+	}
+	if err := addTypes(minorTypes, semver.Minor); err != nil {
+		return bumpRules{}, err
+	}
+	if err := addTypes(majorTypes, semver.Major); err != nil {
+		return bumpRules{}, err
+	}
+
+	allowedTypes := normalizeTypeList(config.AllowedTypes)
+	if len(allowedTypes) == 0 {
+		for value := range rules.levels {
+			allowedTypes = append(allowedTypes, value)
+		}
+		allowedTypes = append(allowedTypes, BreakingChangeType)
+	}
+	rules.allowed = make(map[string]struct{}, len(allowedTypes))
+	for _, value := range allowedTypes {
+		rules.allowed[value] = struct{}{}
+	}
+	return rules, nil
+}
+
+func hasBreakingChange(message string) bool {
+	subject := strings.SplitN(message, "\n", 2)[0]
+	typeAndScope, _, found := strings.Cut(subject, ":")
+	if found && strings.HasSuffix(strings.TrimSpace(typeAndScope), "!") {
+		return true
+	}
+	for _, line := range strings.Split(message, "\n") {
+		if strings.HasPrefix(line, "BREAKING CHANGE: ") ||
+			strings.HasPrefix(line, "BREAKING-CHANGE: ") {
+			return true
+		}
+	}
+	return false
+}
+
+func analyzeCommitMessage(message string, rules bumpRules) semver.CommitType {
+	if hasBreakingChange(message) {
+		if _, allowed := rules.allowed[BreakingChangeType]; !allowed {
+			return semver.NotConventional
+		}
+		return semver.Major
+	}
+
+	subject := strings.SplitN(message, "\n", 2)[0]
+	typeAndScope, _, found := strings.Cut(subject, ":")
 	if !found {
 		return semver.NotConventional
 	}
-
-	// A breaking change is major whatever the allowed types are
-	if strings.TrimSpace(typeAndScope) == "BREAKING CHANGE" {
-		return semver.Major
-	}
-
-	breaking := strings.HasSuffix(typeAndScope, "!")
-	commitType, _, _ := strings.Cut(strings.TrimSuffix(typeAndScope, "!"), "(")
-	commitType = strings.TrimSpace(strings.TrimSuffix(commitType, "!"))
-
-	bump, known := bumpForType[commitType]
-	if !known {
+	commitType, _, _ := strings.Cut(strings.TrimSpace(typeAndScope), "(")
+	commitType = strings.ToLower(strings.TrimSpace(commitType))
+	if _, allowed := rules.allowed[commitType]; !allowed {
 		return semver.NotConventional
 	}
-	if len(allowedTypes) == 0 {
-		allowedTypes = DefaultAllowedTypes()
-	}
-	if !slices.Contains(allowedTypes, commitType) {
+	return rules.levels[commitType]
+}
+
+// AnalyzeCommitMessage gives the version part that one commit subject changes.
+// A type that is not in allowedTypes changes nothing. An empty allowedTypes
+// permits every default type and a breaking marker.
+func AnalyzeCommitMessage(message string, allowedTypes []string) semver.CommitType {
+	rules, err := newBumpRules(Config{AllowedTypes: allowedTypes})
+	if err != nil {
 		return semver.NotConventional
 	}
-
-	if breaking {
-		return semver.Major
-	}
-	return bump
+	return analyzeCommitMessage(message, rules)
 }
 
 // ParseVersionInfo reads one "tag,commit" line into a version. The tag is
@@ -146,6 +256,7 @@ func ParseVersionInfo(line string) (*VersionInfo, error) {
 // only one time for all of the directory groups.
 type tagger struct {
 	config     Config
+	rules      bumpRules
 	head       string
 	tags       []*VersionInfo
 	tagsLoaded bool
@@ -231,16 +342,16 @@ func (t *tagger) analyzeCommits(group *DirectoryVersionInfo) error {
 		group.LastVersion.Package,
 		commitPaths,
 	))
-	subjects, err := commitSubjects(group.LastVersion.CommitHash, commitPaths)
+	commits, err := commitMessages(group.LastVersion.CommitHash, commitPaths)
 	if err != nil {
 		return err
 	}
 
 	highest := semver.NotConventional
 	releaseNotes := []string{}
-	for _, subject := range subjects {
-		logging.Log.Info(fmt.Sprintf("Analyzing Commit: %s", subject))
-		commitType := AnalyzeCommitMessage(subject, t.config.AllowedTypes)
+	for _, commit := range commits {
+		logging.Log.Info(fmt.Sprintf("Analyzing Commit: %s", commit.Subject))
+		commitType := analyzeCommitMessage(commit.Message, t.rules)
 		if commitType > highest {
 			highest = commitType
 		}
@@ -254,7 +365,7 @@ func (t *tagger) analyzeCommits(group *DirectoryVersionInfo) error {
 		case semver.Major:
 			logging.Log.Info("Found Major commit")
 		}
-		releaseNotes = append(releaseNotes, subject)
+		releaseNotes = append(releaseNotes, commit.Subject)
 	}
 
 	// If no change is needed, this will be a noOp
