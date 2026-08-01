@@ -21,6 +21,7 @@ type Config struct {
 	AllowedTypes     []string
 	Directories      []string
 	DirGroups        []string
+	Targets          []TargetConfig
 }
 
 // DoTagging works out the next version of each directory group, makes the
@@ -37,18 +38,18 @@ func DoTagging(config Config) error {
 		return err
 	}
 
-	head, err := headCommit()
-	if err != nil {
-		return err
-	}
-
-	results, err := ParseDirectoryGroups(config.Directories, config.DirGroups, gitRoot)
+	results, err := ParseReleaseTargets(config.Directories, config.DirGroups, config.Targets, gitRoot)
 	if err != nil {
 		return err
 	}
 	// With no directory given, the whole repo is one unnamed package
 	if len(results) == 0 {
 		results = append(results, DirectoryVersionInfo{FullPath: gitRoot})
+	}
+
+	head, err := headCommit()
+	if err != nil {
+		return err
 	}
 
 	run := &tagger{config: config, head: head}

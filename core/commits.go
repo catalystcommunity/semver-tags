@@ -188,8 +188,11 @@ func (t *tagger) latestVersion(group DirectoryVersionInfo) (*VersionInfo, error)
 	packageName := group.PackageName()
 	var highest *VersionInfo
 	for _, tag := range t.tags {
-		// The full path match keeps a tag that names a directory path
-		if tag.Package != packageName && tag.Package != group.Directory {
+		matches := tag.Package == packageName
+		for _, alias := range group.TagAliases {
+			matches = matches || tag.Package == alias
+		}
+		if !matches {
 			continue
 		}
 		if highest == nil || tag.Version.Compare(highest.Version) > 0 {

@@ -107,6 +107,17 @@ func (s *TaggingSuite) tagDryRun(directories []string, dirGroups []string) Outpu
 	})
 }
 
+func (s *TaggingSuite) targetDryRun(targets []TargetConfig) Outputs {
+	return s.runTagging(Config{
+		DryRun:     true,
+		OutputJson: true,
+		Atomic:     true,
+		Remote:     "origin",
+		Branch:     "main",
+		Targets:    targets,
+	})
+}
+
 func (s *TaggingSuite) runTagging(config Config) Outputs {
 	previousStdout := os.Stdout
 	capturePath := filepath.Join(s.T().TempDir(), "outputs.json")
@@ -202,6 +213,207 @@ func (s *TaggingSuite) TestWholeRepositoryKeepsOneUnnamedTag() {
 	assert.Equal(s.T(), "", outputs.ReleasePackage)
 }
 
+func (s *TaggingSuite) TestNamedTargetUsesItsNameWithOnePath() {
+	s.write("services/api/file.txt", "api change")
+	s.commit("fix: api change")
+
+	outputs := s.targetDryRun([]TargetConfig{{
+		Name:  "public-api",
+		Paths: []string{"services/api"},
+	}})
+
+	assert.Equal(s.T(), "public-api/v0.1.1", outputs.NewReleaseGitTag)
+	assert.Equal(s.T(), "public-api", outputs.ReleasePackage)
+	assert.Contains(s.T(), outputs.NewReleaseNotesJson, `"package_public-api"`)
+}
+
+func (s *TaggingSuite) TestNamedTargetUsesEveryPath() {
+	s.write("libs/shared/file.txt", "shared change")
+	s.commit("feat: shared change")
+
+	outputs := s.targetDryRun([]TargetConfig{{
+		Name:  "public-api",
+		Paths: []string{"services/api", "libs/shared"},
+	}})
+
+	assert.Equal(s.T(), "public-api/v0.2.0", outputs.NewReleaseGitTag)
+	assert.Equal(s.T(), "true", outputs.NewReleasePublished)
+}
+
+func (s *TaggingSuite) TestNamedTargetsCanShareAPathAndKeepOrder() {
+	s.write("libs/shared/file.txt", "shared change")
+	s.commit("fix: shared change")
+
+	outputs := s.targetDryRun([]TargetConfig{
+		{Name: "worker-public", Paths: []string{"services/worker", "libs/shared"}},
+		{Name: "api-public", Paths: []string{"services/api", "libs/shared"}},
+	})
+
+	assert.Equal(s.T(), "worker-public,api-public", outputs.ReleasePackage)
+	assert.Equal(
+		s.T(),
+		"worker-public/v0.1.1,api-public/v0.1.1",
+		outputs.NewReleaseGitTag,
+	)
+}
+
+func (s *TaggingSuite) TestLegacyFormsRunBeforeNamedTargets() {
+	s.write("libs/shared/file.txt", "shared change")
+	s.commit("fix: shared change")
+
+	outputs := s.runTagging(Config{
+		DryRun:      true,
+		OutputJson:  true,
+		Directories: []string{"libs/shared"},
+		DirGroups:   []string{"services/api,libs/shared"},
+		Targets: []TargetConfig{{
+			Name:  "worker-public",
+			Paths: []string{"services/worker", "libs/shared"},
+		}},
+	})
+
+	assert.Equal(s.T(), "shared,api,worker-public", outputs.ReleasePackage)
+}
+
+// This configuration uses only interfaces that v0.5.0 supports. Its output
+// values are a compatibility contract for named-target changes.
+func (s *TaggingSuite) TestLegacyV050ConfigurationKeepsItsOutputs() {
+	s.write("libs/shared/file.txt", "shared change")
+	s.commit("fix: shared change")
+
+	outputs := s.runTagging(Config{
+		DryRun:      true,
+		OutputJson:  true,
+		Directories: []string{"services/worker"},
+		DirGroups:   []string{"services/api,libs/shared"},
+	})
+
+	assert.Equal(s.T(), "false,true", outputs.NewReleasePublished)
+	assert.Equal(s.T(), "worker,api", outputs.ReleasePackage)
+	assert.Equal(s.T(), "worker/v2.0.0,api/v1.0.1", outputs.NewReleaseGitTag)
+	assert.Equal(s.T(), "worker/v2.0.0,api/v1.0.0", outputs.LastReleaseGitTag)
+	assert.Equal(s.T(), ",\nfix: shared change", outputs.NewReleaseNotes)
+}
+
+func (s *TaggingSuite) TestChangeOutsideNamedTargetKeepsUnchangedOutputs() {
+	s.git("tag", "public-api/v3.2.1")
+	s.write("services/worker/file.txt", "worker change")
+	s.commit("fix: worker change")
+
+	outputs := s.runTagging(Config{
+		OutputJson: true,
+		Targets: []TargetConfig{{
+			Name:  "public-api",
+			Paths: []string{"services/api"},
+		}},
+	})
+
+	assert.Equal(s.T(), "false", outputs.NewReleasePublished)
+	assert.Equal(s.T(), "public-api/v3.2.1", outputs.LastReleaseGitTag)
+	assert.Equal(s.T(), outputs.LastReleaseGitTag, outputs.NewReleaseGitTag)
+	command := exec.Command("git", "tag", "--list", "public-api/v3.2.2")
+	command.Dir = s.repoDir
+	content, err := command.Output()
+	require.NoError(s.T(), err)
+	assert.Empty(s.T(), string(content))
+}
+
+func (s *TaggingSuite) TestNamedTargetReadsOnlyItsExplicitTagName() {
+	s.git("tag", "services/api/v9.0.0")
+	s.write("services/api/file.txt", "api change")
+	s.commit("fix: api change")
+
+	outputs := s.targetDryRun([]TargetConfig{{
+		Name:  "public-api",
+		Paths: []string{"services/api"},
+	}})
+
+	assert.Equal(s.T(), "public-api/v0.1.0", outputs.LastReleaseGitTag)
+	assert.Equal(s.T(), "public-api/v0.1.1", outputs.NewReleaseGitTag)
+}
+
+func (s *TaggingSuite) TestLegacyTargetStillReadsAFullPathTag() {
+	s.git("tag", "services/api/v4.0.0")
+	s.write("services/api/file.txt", "api change")
+	s.commit("fix: api change")
+
+	outputs := s.tagDryRun([]string{"services/api"}, nil)
+
+	assert.Equal(s.T(), "api/v4.0.0", outputs.LastReleaseGitTag)
+	assert.Equal(s.T(), "api/v4.0.1", outputs.NewReleaseGitTag)
+}
+
+func (s *TaggingSuite) TestNamedPathsAreRelativeToTheGitRoot() {
+	s.write("services/api/file.txt", "api change")
+	s.commit("fix: api change")
+	require.NoError(s.T(), os.Chdir(filepath.Join(s.repoDir, "libs")))
+
+	outputs := s.targetDryRun([]TargetConfig{{
+		Name:  "public-api",
+		Paths: []string{"services/api"},
+	}})
+
+	assert.Equal(s.T(), "public-api/v0.1.1", outputs.NewReleaseGitTag)
+}
+
+func (s *TaggingSuite) TestNamedTargetCanUseAFilePath() {
+	s.write("README.md", "readme change")
+	s.commit("docs: update readme")
+
+	outputs := s.targetDryRun([]TargetConfig{{
+		Name:  "documentation",
+		Paths: []string{"README.md"},
+	}})
+
+	assert.Equal(s.T(), "documentation/v0.1.1", outputs.NewReleaseGitTag)
+}
+
+func (s *TaggingSuite) TestNamedTargetDotPathUsesTheWholeRepository() {
+	s.write("services/worker/file.txt", "worker change")
+	s.commit("fix: worker change")
+
+	outputs := s.targetDryRun([]TargetConfig{{
+		Name:  "all-source",
+		Paths: []string{"."},
+	}})
+
+	assert.Equal(s.T(), "all-source/v0.1.1", outputs.NewReleaseGitTag)
+}
+
+func (s *TaggingSuite) TestMultipleNamedTagsUseOneAtomicPush() {
+	remoteDir := filepath.Join(s.T().TempDir(), "remote.git")
+	command := exec.Command("git", "init", "-q", "--bare", remoteDir)
+	require.NoError(s.T(), command.Run())
+	s.git("remote", "add", "origin", remoteDir)
+
+	s.write("services/api/file.txt", "api change")
+	s.write("services/worker/file.txt", "worker change")
+	s.commit("fix: service change")
+
+	outputs := s.runTagging(Config{
+		OutputJson: true,
+		Atomic:     true,
+		Remote:     "origin",
+		Branch:     "",
+		Targets: []TargetConfig{
+			{Name: "public-api", Paths: []string{"services/api"}},
+			{Name: "public-worker", Paths: []string{"services/worker"}},
+		},
+	})
+
+	assert.Equal(
+		s.T(),
+		"public-api/v0.1.1,public-worker/v0.1.1",
+		outputs.NewReleaseGitTag,
+	)
+	for _, tag := range []string{"public-api/v0.1.1", "public-worker/v0.1.1"} {
+		check := exec.Command("git", "--git-dir", remoteDir, "rev-parse", "refs/tags/"+tag)
+		content, err := check.Output()
+		require.NoError(s.T(), err)
+		assert.Equal(s.T(), s.headCommit(), string(content[:40]))
+	}
+}
+
 // A --directories value keeps its old meaning. It is one literal path, even
 // when it holds a comma, and it never becomes a group.
 func (s *TaggingSuite) TestDirectoriesValueStaysOneLiteralPath() {
@@ -276,6 +488,99 @@ func (s *TaggingSuite) TestEmptyGroupIsAnError() {
 
 	require.Error(s.T(), err)
 	assert.Contains(s.T(), err.Error(), "does not name a directory")
+}
+
+func (s *TaggingSuite) TestDuplicateNamedTargetsAreAnError() {
+	_, err := ParseReleaseTargets(nil, nil, []TargetConfig{
+		{Name: "public-api", Paths: []string{"services/api"}},
+		{Name: "public-api", Paths: []string{"libs/shared"}},
+	}, s.repoDir)
+
+	require.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), `both tag the package "public-api"`)
+}
+
+func (s *TaggingSuite) TestNamedTargetAndDirectoryCanNotShareAName() {
+	_, err := ParseReleaseTargets(
+		[]string{"services/api"},
+		nil,
+		[]TargetConfig{{Name: "api", Paths: []string{"libs/shared"}}},
+		s.repoDir,
+	)
+
+	require.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), `both tag the package "api"`)
+}
+
+func (s *TaggingSuite) TestNamedTargetAndDirectoryGroupCanNotShareAName() {
+	_, err := ParseReleaseTargets(
+		nil,
+		[]string{"services/api,libs/shared"},
+		[]TargetConfig{{Name: "api", Paths: []string{"services/worker"}}},
+		s.repoDir,
+	)
+
+	require.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), `both tag the package "api"`)
+}
+
+func (s *TaggingSuite) TestNamedTargetValidation() {
+	tests := []struct {
+		name   string
+		target TargetConfig
+		text   string
+	}{
+		{name: "empty name", target: TargetConfig{Paths: []string{"services/api"}}, text: "name must not be empty"},
+		{name: "empty paths", target: TargetConfig{Name: "api"}, text: "at least one path"},
+		{name: "empty path", target: TargetConfig{Name: "api", Paths: []string{""}}, text: "path must not be empty"},
+		{name: "absolute path", target: TargetConfig{Name: "api", Paths: []string{"/services/api"}}, text: "relative to the Git root"},
+		{name: "outside path", target: TargetConfig{Name: "api", Paths: []string{"../api"}}, text: "stay in the Git repository"},
+		{name: "backslash path", target: TargetConfig{Name: "api", Paths: []string{`services\api`}}, text: "forward slashes"},
+		{name: "comma name", target: TargetConfig{Name: "api,worker", Paths: []string{"services/api"}}, text: "not a safe Git tag prefix"},
+		{name: "equals name", target: TargetConfig{Name: "api=worker", Paths: []string{"services/api"}}, text: "not a safe Git tag prefix"},
+		{name: "slash name", target: TargetConfig{Name: "scope/api", Paths: []string{"services/api"}}, text: "not a safe Git tag prefix"},
+		{name: "dot sequence", target: TargetConfig{Name: "api..next", Paths: []string{"services/api"}}, text: "not a safe Git tag prefix"},
+		{name: "lock suffix", target: TargetConfig{Name: "api.lock", Paths: []string{"services/api"}}, text: "not a safe Git tag prefix"},
+	}
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			_, err := ParseReleaseTargets(nil, nil, []TargetConfig{test.target}, s.repoDir)
+			require.Error(s.T(), err)
+			assert.Contains(s.T(), err.Error(), test.text)
+		})
+	}
+}
+
+func (s *TaggingSuite) TestNamedTargetNormalizesAndRemovesRepeatedPaths() {
+	groups, err := ParseReleaseTargets(nil, nil, []TargetConfig{{
+		Name:  "public-api",
+		Paths: []string{"services/api", "services/./api"},
+	}}, s.repoDir)
+
+	require.NoError(s.T(), err)
+	require.Len(s.T(), groups, 1)
+	assert.Equal(s.T(), []string{"services/api"}, groups[0].Directories)
+}
+
+func TestParseTargetSpecifications(t *testing.T) {
+	targets, err := ParseTargetSpecifications([]string{
+		"public-api=services/api,libs/shared",
+		"worker=services/worker",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, []TargetConfig{
+		{Name: "public-api", Paths: []string{"services/api", "libs/shared"}},
+		{Name: "worker", Paths: []string{"services/worker"}},
+	}, targets)
+}
+
+func TestParseTargetSpecificationsRequiresEquals(t *testing.T) {
+	_, err := ParseTargetSpecifications([]string{"public-api"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "name=path[,path...]")
 }
 
 // A tag that is not a version, such as "nightly", must not stop the run.

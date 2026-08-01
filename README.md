@@ -3,10 +3,11 @@
 Do an analysis of a repo or its subdirs and generate git tags for semantic versioning based on conventional commits. Oh, and release notes generated.
 
 ## Features
-* Analyze a repo, or a set of directories in a repo and generate semantic version tags.
-* Group more than one directory under one tag with `--dir_group`, so a shared library releases each package that uses it.
-* In github action mode, set outputs for use in other github action steps
-* Generate releaase notes
+- Analyze a repository or a set of paths and generate semantic version tags.
+- Group more than one directory under one tag with `--dir_group`.
+- Give a release target a public name that does not depend on a path name.
+- Set outputs for other GitHub Actions steps.
+- Generate release notes.
 
 ## Directories
 
@@ -46,6 +47,55 @@ shared library on its own as well, name it in a `--directories` flag too.
 Every group must make a different tag name. The command stops with an error if
 two groups make the same tag name.
 
+## Named Targets
+
+Use a named target when the public release name must not depend on a source
+path. A target has one name and one or more paths. A path can name a file or a
+directory. A commit in any target path affects that target.
+
+Use `targets` in `.semver-tags.yaml` for the full configuration form:
+
+```yaml
+targets:
+  - name: public-api
+    paths:
+      - services/api
+      - libs/shared
+      - README.md
+  - name: public-worker
+    paths:
+      - services/worker
+      - libs/shared
+```
+
+This configuration can make the tags `public-api/v1.2.3` and
+`public-worker/v2.1.0`. A commit in `libs/shared` affects both targets.
+
+Use the repeatable `--target` flag for the compact command-line form:
+
+```sh
+semver-tags run \
+  --target "public-api=services/api,libs/shared" \
+  --target "public-worker=services/worker,libs/shared"
+```
+
+The compact form uses the first `=` to separate the name from the paths. A
+comma separates the paths. The compact form has no escape syntax. Use the
+configuration file if a path contains a comma.
+
+A target name must start with a letter or digit. It can contain letters,
+digits, dots, underscores, and hyphens. It cannot contain `..`, and it cannot
+end with a dot or `.lock`. Each target path is relative to the Git root. Use
+forward slashes. A path of `.` includes the full repository.
+
+You can use `--directories`, `--dir_group`, and named targets in one run. Each
+release name must be unique. The output order is `directories`, `dir_group`,
+and then `targets`.
+
+The `directories` and `dir_group` settings remain supported. Use `directories`
+for one path when its basename is the required tag name. Use `dir_group` for
+multiple paths when the first path basename is the required tag name.
+
 ## Commit Types
 
 The command reads conventional commits. A `feat` commit increases the minor
@@ -72,6 +122,11 @@ directories:
   - services/api
 dir_group:
   - services/worker,libs/shared
+targets:
+  - name: public-tools
+    paths:
+      - tools/cli
+      - libs/shared
 ```
 
 A flag on the command line replaces the value in the file.
@@ -85,8 +140,9 @@ name in capital letters. A flag on the command line replaces the variable.
 DRY_RUN=true BRANCH=main semver-tags run
 ```
 
-For `DIRECTORIES` and `DIR_GROUP`, a space separates the values. A comma keeps
-its meaning inside one `DIR_GROUP` value. These two commands do the same thing:
+For `DIRECTORIES`, `DIR_GROUP`, and `TARGETS`, a space separates the values. A
+comma keeps its meaning inside one `DIR_GROUP` or `TARGETS` value. These two
+commands do the same thing:
 
 ```sh
 semver-tags run \
@@ -101,14 +157,29 @@ DIR_GROUP="services/api,libs/shared services/worker,libs/shared" \
   semver-tags run
 ```
 
-A directory path with a space in it does not work in these variables. Use the
-flags for such a path.
+Use this form for named targets:
+
+```sh
+TARGETS="public-api=services/api,libs/shared public-worker=services/worker,libs/shared" \
+  semver-tags run
+```
+
+`TARGETS` uses a space between targets, the first `=` between a name and its
+paths, and a comma between paths. It has no escape syntax. A path that contains
+a space or comma does not work in this variable. Use the structured
+configuration-file form for that path.
+
+Command-line `--target` values replace `TARGETS` and file `targets` values.
+`TARGETS` values replace file `targets` values.
+
+A path with a space does not work in `DIRECTORIES` or `DIR_GROUP`. Use the
+flags for that path.
 
 ## Outputs
 
 The command writes one JSON object. Each field holds one value for each group,
-separated by commas. The order is every `--directories` value first, then every
-`--dir_group` value.
+separated by commas. The order is every `directories` value first, then every
+`dir_group` value, and then every named target.
 
 ```sh
 semver-tags run --dry_run --output_json --dir_group "services/api,libs/shared"
