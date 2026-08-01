@@ -6,6 +6,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/catalystcommunity/app-utils-go/logging"
 	"github.com/catalystcommunity/semver-tags/core"
@@ -19,8 +20,8 @@ var runCmd = &cobra.Command{
 	Short: "Run the cli",
 	Long: `Runs the cli as a straight shot attempt.
 
-With no --directories and no --dir_group, the command analyzes the whole
-repository and makes one tag, for example v1.2.3.
+With no --directories, --dir_group, or --target value, the command analyzes
+the whole repository and makes one tag, for example v1.2.3.
 
 Use --directories to give one subdirectory its own tag. Give the flag one time
 for each tag you want. The last part of the directory path names the tag.
@@ -47,10 +48,27 @@ each group makes its own tag.
 You can use both flags in the same run. Every group must make a different tag
 name. The command stops with an error if two groups make the same tag name.
 
-The outputs hold one value for each group, separated by commas. The order is
-every --directories value first, then every --dir_group value.`,
+Use --target when a public tag name must not depend on a path name. Put the
+name before an equals sign. Separate multiple paths with commas. Repeat the
+flag for more targets.
+
+  semver-tags run \
+    --target "public-api=services/api,libs/shared" \
+    --target "public-worker=services/worker,libs/shared"
+
+The first target can make public-api/v1.2.3. A commit in libs/shared affects
+both targets. A target path can name a file or a directory.
+
+The outputs hold one value for each group or target, separated by commas. The order is
+every --directories value first, then every --dir_group value, and then every
+--target value.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		runCommand(initRunConfig())
+		config, err := initRunConfig(cmd)
+		if err != nil {
+			logging.Log.WithError(err).Error("error resolving configuration")
+			os.Exit(1)
+		}
+		runCommand(config)
 	},
 }
 
@@ -67,6 +85,7 @@ func init() {
 	runCmd.PersistentFlags().StringArray("allowed_types", core.DefaultAllowedTypes(), "the conventional commit types that change a version, a type outside the list changes nothing")
 	runCmd.PersistentFlags().StringArray("directories", []string{}, "one subdirectory to apply its own tag for, named after the last part of the path, repeat the flag for more tags, which makes github action outputs comma separated")
 	runCmd.PersistentFlags().StringArray("dir_group", []string{}, "a comma separated list of subdirectories that share one tag, named after the first directory in the list, repeat the flag for more tag groups, which makes github action outputs comma separated")
+	runCmd.PersistentFlags().StringArray("target", []string{}, "a named release target in name=path[,path...] form, repeat the flag for more targets")
 
 	// bind flags
 	err := viper.BindPFlags(runCmd.PersistentFlags())
@@ -77,7 +96,32 @@ func init() {
 	}
 }
 
-func initRunConfig() core.Config {
+func resolveTargetConfigs(cmd *cobra.Command) ([]core.TargetConfig, error) {
+	if cmd.Flags().Changed("target") {
+		values, err := cmd.Flags().GetStringArray("target")
+		if err != nil {
+			return nil, fmt.Errorf("can not read --target: %w", err)
+		}
+		return core.ParseTargetSpecifications(values)
+	}
+
+	if value, found := os.LookupEnv("TARGETS"); found {
+		return core.ParseTargetSpecifications(strings.Fields(value))
+	}
+
+	var targets []core.TargetConfig
+	if err := viper.UnmarshalKey("targets", &targets); err != nil {
+		return nil, fmt.Errorf("can not read targets from the configuration file: %w", err)
+	}
+	return targets, nil
+}
+
+func initRunConfig(cmd *cobra.Command) (core.Config, error) {
+	targets, err := resolveTargetConfigs(cmd)
+	if err != nil {
+		return core.Config{}, err
+	}
+
 	config := core.Config{
 		DryRun:           viper.GetBool("dry_run"),
 		GithubAction:     viper.GetBool("github_action"),
@@ -90,11 +134,12 @@ func initRunConfig() core.Config {
 		AllowedTypes:     viper.GetStringSlice("allowed_types"),
 		Directories:      viper.GetStringSlice("directories"),
 		DirGroups:        viper.GetStringSlice("dir_group"),
+		Targets:          targets,
 	}
 
 	logging.Log.WithField("settings", fmt.Sprintf("%+v", config)).Debug("viper settings")
 
-	return config
+	return config, nil
 }
 
 func runCommand(config core.Config) {

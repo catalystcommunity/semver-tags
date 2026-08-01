@@ -5,25 +5,39 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
-// DirectoryVersionInfo holds one tag group. Directory is the first directory
-// of the group, and it names the tag. Directories holds the git paths of every
-// directory in the group, because a commit in any of them changes this tag.
+// TargetConfig separates the public release name from the paths that affect
+// the release.
+type TargetConfig struct {
+	Name  string   `mapstructure:"name" yaml:"name"`
+	Paths []string `mapstructure:"paths" yaml:"paths"`
+}
+
+// DirectoryVersionInfo holds one release target. Package is its public name.
+// Directories holds the Git paths that affect it. Directory and TagAliases
+// keep the legacy directory-name behavior.
 type DirectoryVersionInfo struct {
 	Directory    string
 	Directories  []string
+	Package      string
+	TagAliases   []string
 	FullPath     string
 	LastVersion  *VersionInfo
 	NextVersion  *VersionInfo
 	ReleaseNotes []string
 	UseRoot      bool
+	RootRelative bool
 }
 
-// PackageName gives the package part of the tag for this group. It is the last
-// path element of the first directory, and it is empty for whole repo mode.
+// PackageName gives the package part of the tag. Parsed targets store this
+// value explicitly. The fallback keeps callers that construct legacy values.
 func (d *DirectoryVersionInfo) PackageName() string {
+	if d.Package != "" {
+		return d.Package
+	}
 	trimmed := strings.TrimRight(d.Directory, "/")
 	if trimmed == "" {
 		return ""
@@ -36,6 +50,17 @@ func (d *DirectoryVersionInfo) PackageName() string {
 // repo mode the group has no directories, so the full path is the limit.
 func (d *DirectoryVersionInfo) CommitPaths() []string {
 	if len(d.Directories) > 0 {
+		if d.RootRelative {
+			paths := make([]string, 0, len(d.Directories))
+			for _, directory := range d.Directories {
+				if directory == "." {
+					paths = append(paths, ":(top)")
+					continue
+				}
+				paths = append(paths, ":(top,literal)"+directory)
+			}
+			return paths
+		}
 		return d.Directories
 	}
 	return []string{strings.TrimRight(d.FullPath, "/")}
@@ -43,6 +68,9 @@ func (d *DirectoryVersionInfo) CommitPaths() []string {
 
 func (d *DirectoryVersionInfo) Printable() string {
 	retVal := "DirectoryVersionInfo:\n"
+	if d.RootRelative {
+		retVal += fmt.Sprintf("Package: %s\n", d.PackageName())
+	}
 	retVal += fmt.Sprintf("Directory: %s\n", d.Directory)
 	retVal += fmt.Sprintf("Directories: %v\n", d.Directories)
 	retVal += fmt.Sprintf("FullPath: %s\n", d.FullPath)
@@ -71,6 +99,29 @@ func splitDirectoryGroup(value string) []string {
 		members = append(members, part)
 	}
 	return members
+}
+
+// ParseTargetSpecifications reads the compact form that the command-line and
+// environment interfaces use. A comma separates paths. This form does not
+// have an escaping syntax.
+func ParseTargetSpecifications(values []string) ([]TargetConfig, error) {
+	targets := make([]TargetConfig, 0, len(values))
+	for _, value := range values {
+		name, pathsText, found := strings.Cut(value, "=")
+		if !found {
+			return nil, fmt.Errorf("target %q must have the form name=path[,path...]", value)
+		}
+
+		paths := strings.Split(pathsText, ",")
+		for index := range paths {
+			paths[index] = strings.TrimSpace(paths[index])
+		}
+		targets = append(targets, TargetConfig{
+			Name:  strings.TrimSpace(name),
+			Paths: paths,
+		})
+	}
+	return targets, nil
 }
 
 // appendNewPath adds a path only when the list does not hold it, because a
@@ -125,7 +176,76 @@ func newDirectoryGroup(
 		}
 		group.Directories = appendNewPath(group.Directories, commitPath)
 	}
+	group.Package = group.PackageName()
+	if group.Directory != group.Package {
+		group.TagAliases = []string{group.Directory}
+	}
 
+	return group, nil
+}
+
+var targetNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+
+func validateTargetName(name string) error {
+	if name == "" {
+		return fmt.Errorf("target name must not be empty")
+	}
+	if !targetNamePattern.MatchString(name) ||
+		strings.Contains(name, "..") ||
+		strings.HasSuffix(name, ".") ||
+		strings.HasSuffix(strings.ToLower(name), ".lock") {
+		return fmt.Errorf(
+			"target name %q is not a safe Git tag prefix; use letters, digits, dots, underscores, and hyphens",
+			name,
+		)
+	}
+	if _, err := runGit("check-ref-format", "refs/tags/"+name+"/v0.0.0"); err != nil {
+		return fmt.Errorf("target name %q is not a valid Git tag prefix", name)
+	}
+	return nil
+}
+
+// normalizeTargetPath makes one named-target path relative to the Git root.
+// It does not check if the path exists because deleted paths can affect a
+// release.
+func normalizeTargetPath(value string) (string, error) {
+	if strings.TrimSpace(value) == "" {
+		return "", fmt.Errorf("target path must not be empty")
+	}
+	if strings.Contains(value, `\`) {
+		return "", fmt.Errorf("target path %q must use forward slashes", value)
+	}
+	if filepath.IsAbs(value) || path.IsAbs(value) {
+		return "", fmt.Errorf("target path %q must be relative to the Git root", value)
+	}
+
+	normalized := path.Clean(value)
+	if normalized == ".." || strings.HasPrefix(normalized, "../") {
+		return "", fmt.Errorf("target path %q must stay in the Git repository", value)
+	}
+	return normalized, nil
+}
+
+func newNamedTarget(target TargetConfig, gitRoot string) (DirectoryVersionInfo, error) {
+	group := DirectoryVersionInfo{
+		Package:      target.Name,
+		FullPath:     gitRoot,
+		RootRelative: true,
+	}
+	if err := validateTargetName(target.Name); err != nil {
+		return group, err
+	}
+	if len(target.Paths) == 0 {
+		return group, fmt.Errorf("target %q must have at least one path", target.Name)
+	}
+
+	for _, value := range target.Paths {
+		normalized, err := normalizeTargetPath(value)
+		if err != nil {
+			return group, fmt.Errorf("target %q: %w", target.Name, err)
+		}
+		group.Directories = appendNewPath(group.Directories, normalized)
+	}
 	return group, nil
 }
 
@@ -182,6 +302,45 @@ func ParseDirectoryGroups(
 		if err := addGroup(value, splitDirectoryGroup(value)); err != nil {
 			return nil, err
 		}
+	}
+
+	return groups, nil
+}
+
+// ParseReleaseTargets makes every release target for one run. Legacy
+// directories keep their current order and behavior. Named targets follow
+// all legacy targets in their configured order.
+func ParseReleaseTargets(
+	directories []string,
+	dirGroups []string,
+	targets []TargetConfig,
+	gitRoot string,
+) ([]DirectoryVersionInfo, error) {
+	groups, err := ParseDirectoryGroups(directories, dirGroups, gitRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	groupForPackage := make(map[string]string, len(groups)+len(targets))
+	for _, group := range groups {
+		groupForPackage[group.PackageName()] = "a legacy directory or directory group"
+	}
+
+	for index, target := range targets {
+		group, err := newNamedTarget(target, gitRoot)
+		if err != nil {
+			return nil, err
+		}
+		if previous, found := groupForPackage[group.PackageName()]; found {
+			return nil, fmt.Errorf(
+				"%s and target %q at position %d both tag the package %q",
+				previous, target.Name, index+1, group.PackageName(),
+			)
+		}
+		groupForPackage[group.PackageName()] = fmt.Sprintf(
+			"target %q at position %d", target.Name, index+1,
+		)
+		groups = append(groups, group)
 	}
 
 	return groups, nil
