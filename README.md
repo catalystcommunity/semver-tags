@@ -1,13 +1,30 @@
 # semver-tags
 
-Do an analysis of a repo or its subdirs and generate git tags for semantic versioning based on conventional commits. Oh, and release notes generated.
+Create semantic version Git tags from conventional commits. You can create one
+tag series for the full repository or separate tag series for selected paths.
+The command also creates release-note and version outputs.
 
 ## Features
+
 - Analyze a repository or a set of paths and generate semantic version tags.
 - Group more than one directory under one tag with `--dir_group`.
 - Give a release target a public name that does not depend on a path name.
 - Set outputs for other GitHub Actions steps.
-- Generate release notes.
+- Create release notes from commit subjects.
+
+## Usage
+
+Run `semver-tags run` in a Git work tree. The command creates and pushes tags
+unless you use `--dry_run`.
+
+```sh
+semver-tags run [flags]
+semver-tags run --help
+```
+
+By default, the command uses the `origin` remote and pushes the `main` branch
+with the tags. It prints a JSON object by default. Use `--output_json=false`
+if you do not want this output.
 
 ## Directories
 
@@ -111,9 +128,9 @@ By default, these types make a patch release: `build`, `chore`, `ci`, `docs`,
 a minor release. No ordinary type makes a major release by default.
 
 Use `--patch_types`, `--minor_types`, and `--major_types` to configure other
-types. Each flag is repeatable and also accepts comma-separated values. A value
-replaces the default list for that level. The command always adds `fix` to the
-patch list and `feat` to the minor list.
+types. Each flag is repeatable. Each flag also accepts comma-separated values.
+A configured value replaces the default list for that level. The command
+always adds `fix` to the patch list and `feat` to the minor list.
 
 ```sh
 semver-tags run \
@@ -137,10 +154,20 @@ semver-tags run --allowed_types fix --allowed_types "holiday,BREAKING CHANGE"
 If you set `allowed_types`, include `BREAKING CHANGE` to permit breaking
 markers.
 
+## Version Identifiers
+
+Use `--pre_release_string` to add a pre-release identifier. The first tag for
+an identifier has the `.1` suffix. If the last version has the same
+identifier, the command increases this suffix.
+
+Use `--build_string` to add build information to a new version. For example,
+the value `build7` adds `+build7` to the tag.
+
 ## Configuration File
 
-The command reads `.semver-tags.yaml` from the current directory, or the file
-that `--config` names. Each key is a flag name.
+The command reads `.semver-tags.yaml` from the current directory. Use
+`--config` to select a different file. Most keys use the flag name. The short
+version keys use underscores, and named targets use the `targets` key.
 
 ```yaml
 dry_run: true
@@ -170,13 +197,13 @@ targets:
       - libs/shared
 ```
 
-A flag on the command line replaces the value in the file.
+A command-line value replaces an environment or file value.
 
 ## Environment Variables
 
-Each flag also reads an environment variable. The variable name is the flag
-name in capital letters. An underscore replaces a hyphen. A flag on the
-command line replaces the variable.
+Each setting also reads an environment variable. The variable name is the
+setting name in capital letters. Use underscores in the variable name. A
+command-line value replaces an environment value.
 
 ```sh
 DRY_RUN=true BRANCH=main semver-tags run
@@ -233,22 +260,55 @@ The environment form uses `BREAKING-CHANGE` as an alias because
 
 ## Outputs
 
-The command writes one JSON object. Each field holds one value for each group,
-separated by commas. The order is every `directories` value first, then every
-`dir_group` value, and then every named target.
+The command writes one JSON object when `output_json` is true. All values in
+this object are strings. Most fields contain one comma-separated value for
+each release target. The order is `directories`, then `dir_group`, and then
+`targets`.
 
 ```sh
 semver-tags run --dry_run --output_json --dir_group "services/api,libs/shared"
 ```
+
+The JSON object has these fields:
+
+| Field | Content |
+| --- | --- |
+| `New_release_published` | `true` when the calculated version changed. In a dry run, no tag is published. |
+| `New_release_version` | The new version without the `v` prefix or package name. |
+| `New_release_major_version` | The major part of the new version. |
+| `New_release_minor_version` | The minor part of the new version. |
+| `New_release_patch_version` | The patch part of the new version. |
+| `New_release_git_head` | The commit for the new tag. |
+| `New_release_notes` | Commit subjects. A comma and newline separate release targets. |
+| `New_release_notes_json` | A JSON object that contains an array of commit subjects for each package. |
+| `Dry_run` | The dry-run state. |
+| `Release_package` | The package or target name. This value is empty for a full-repository release. |
+| `New_release_git_tag` | The calculated full tag. |
+| `Last_release_version` | The previous version without the `v` prefix or package name. |
+| `Last_release_git_head` | The commit for the previous tag. |
+| `Last_release_git_tag` | The previous full tag. |
+
+Use `--github_action` to write the same values as GitHub Actions outputs. The
+output names use lowercase letters. For example, the command writes
+`new_release_git_tag` and `new_release_notes_json`.
+
+The release notes include all commit subjects in the selected Git history.
+The commit type controls the version change, but it does not filter the
+release notes. Use `New_release_notes_json` when you must reliably separate
+the notes for multiple targets.
 
 ## Push Behavior
 
 The command pushes only the tags it makes in this run. If no version changes,
 the command pushes nothing.
 
-By default the command also pushes the branch that `--branch` names. Set
+By default, the command also pushes the branch that `--branch` names. Set
 `--branch ""` to push only the tags. Use this in a CI job that checked out a
 commit instead of a branch.
+
+The command uses an atomic push by default. Thus, the remote accepts all new
+tags and the selected branch, or it accepts none of them. Use `--atomic=false`
+when the remote does not support atomic pushes.
 
 ## Short Version Tags
 
@@ -316,11 +376,14 @@ golangci-lint run ./...
 
 ## Why
 
-We used to use Semantic-Release which is fine and dandy. We had problems with plugins and using it in a github action when the commmunity struggled with the shift to ESM imports. We are sure it will work out fine, but we can't wait, so we took the piece that was most important and separated concerns. `semver-tags` won't do anything but generate tags and give us outputs to do other things. e.g. If we want to publish a release, that's a simple thing and we can do that in a separate step based on the outputs provided.
+This project replaces the tag calculation that we previously did with
+Semantic Release. Plugin and ESM changes made that workflow difficult to use
+in GitHub Actions. This command has a smaller scope. It creates tags and
+outputs. A separate CI step can use those outputs to publish a release.
 
 ## Status
 
-Currently being experimented with. We're going to use this in production asap, but use at your own risk.
+This project is experimental. Evaluate it before you use it in production.
 
 ## LICENSE
 
@@ -328,4 +391,6 @@ Apache 2.0
 
 ## Contributing
 
-Uh... hit us up somewhere before you do any work. We're happy to accept PRs if they make sense, but we don't want anyone to waste their time on a feature or approach we won't accept. Feel free to fork though, just change the command/repo name.
+Contact the maintainers before you start a contribution. This step helps you
+confirm that the proposed change is suitable. You can also fork the project.
+If you publish the fork, use a different command and repository name.

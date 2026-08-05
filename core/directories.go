@@ -28,7 +28,6 @@ type DirectoryVersionInfo struct {
 	LastVersion  *VersionInfo
 	NextVersion  *VersionInfo
 	ReleaseNotes []string
-	UseRoot      bool
 	RootRelative bool
 }
 
@@ -88,7 +87,6 @@ func (d *DirectoryVersionInfo) Printable() string {
 	return retVal
 }
 
-// splitDirectoryGroup splits one --dir_group value into its directories.
 func splitDirectoryGroup(value string) []string {
 	var members []string
 	for _, part := range strings.Split(value, ",") {
@@ -162,7 +160,6 @@ func newDirectoryGroup(
 		return group, fmt.Errorf("can not resolve directory %s: %w", members[0], err)
 	}
 	if primaryPath == gitRootPath {
-		group.UseRoot = true
 		group.Directory = path.Base(gitRootPath)
 		group.FullPath = path.Dir(gitRoot)
 	} else {
@@ -265,7 +262,7 @@ func ParseDirectoryGroups(
 	}
 
 	var groups []DirectoryVersionInfo
-	// Two groups that make the same tag would collide, so refuse that early.
+	// Reject duplicate package names before they create colliding tags.
 	groupForPackage := map[string]string{}
 
 	addGroup := func(value string, members []string) error {
@@ -291,7 +288,7 @@ func ParseDirectoryGroups(
 		return nil
 	}
 
-	// A --directories value stays one literal path, the way it always was
+	// Keep the legacy behavior: commas in --directories are literal.
 	for _, value := range directories {
 		if err := addGroup(value, []string{value}); err != nil {
 			return nil, err

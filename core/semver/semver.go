@@ -101,7 +101,7 @@ func compareIdentifiers(left string, right string) int {
 	}
 }
 
-// The only "logic" function, you have to pass in everything that could matter and it will bump appropriately
+// BumpVersion applies a commit level and optional version identifiers.
 func (v *Semver) BumpVersion(commitType CommitType, preRelease string, build string) {
 	cleanPreRelease := strings.Trim(preRelease, " \n\r\t")
 	currentPreRelease := strings.Split(v.PreRelease, ".")[0]
@@ -110,7 +110,6 @@ func (v *Semver) BumpVersion(commitType CommitType, preRelease string, build str
 		v.IncrementPreRelease()
 		return
 	}
-	// The current prerelease is not the same, so just set this one instead of incrementing Major/Minor/Patch
 	if cleanPreRelease != "" {
 		v.PreRelease = preRelease + ".1"
 		if build != "" {
@@ -166,7 +165,7 @@ func (v *Semver) IncrementPreRelease() {
 
 	numberPart := parts[1]
 	number, err := strconv.Atoi(numberPart)
-	// If there's an error, assume numberPart is a string and not an int, and make it 1
+	// Restart at 1 when the existing suffix is not a number.
 	if err != nil {
 		v.PreRelease = parts[0] + ".1"
 		return

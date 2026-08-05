@@ -14,11 +14,10 @@ import (
 	"github.com/spf13/viper"
 )
 
-// runCmd represents the run command
 var runCmd = &cobra.Command{
 	Use:   "run",
-	Short: "Run the cli",
-	Long: `Runs the cli as a straight shot attempt.
+	Short: "Calculate and create semantic version tags",
+	Long: `Calculate and create semantic version tags.
 
 With no --directories, --dir_group, or --target value, the command analyzes
 the whole repository and makes one tag, for example v1.2.3.
@@ -75,9 +74,10 @@ default in the next major version. Until then, the command writes a migration
 warning when neither short-version flag is set. Use --skip-short-versions to
 keep only full tags and suppress the warning.
 
-The outputs hold one value for each group or target, separated by commas. The
-order is every --directories value first, then every --dir_group value, and
-then every --target value.`,
+Most output fields hold one comma-separated value for each group or target.
+The order is every --directories value first, then every --dir_group value,
+and then every --target value.`,
+	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		config, err := initRunConfig(cmd)
 		if err != nil {
@@ -90,27 +90,25 @@ then every --target value.`,
 
 func init() {
 	rootCmd.AddCommand(runCmd)
-	runCmd.PersistentFlags().Bool("dry_run", false, "when true, do not do any tagging")
-	runCmd.PersistentFlags().Bool("github_action", false, "when true, make github action outputs for use in other steps")
-	runCmd.PersistentFlags().Bool("output_json", true, "when true, print a json object of results, including dry_run status")
-	runCmd.PersistentFlags().Bool("atomic", true, "when true, uses the --atomic flag with git push, otherwise uses a regular push")
-	runCmd.PersistentFlags().String("pre_release_string", "", "the string that represents the pre-release part of the semver")
-	runCmd.PersistentFlags().String("build_string", "", "the string that represents the build part of the semver")
-	runCmd.PersistentFlags().String("remote", "origin", "the name of the remote to push to")
-	runCmd.PersistentFlags().String("branch", "main", "the name of the branch to push to, set it empty to push only the tags")
-	runCmd.PersistentFlags().StringArray("allowed_types", []string{}, "the commit types that can change a version, repeat the flag or use commas, defaults to all configured types and BREAKING CHANGE")
-	runCmd.PersistentFlags().StringArray("patch_types", core.DefaultPatchTypes(), "the commit types that make a patch release, repeat the flag or use commas; fix always makes a patch release")
-	runCmd.PersistentFlags().StringArray("minor_types", core.DefaultMinorTypes(), "the commit types that make a minor release, repeat the flag or use commas; feat always makes a minor release")
-	runCmd.PersistentFlags().StringArray("major_types", core.DefaultMajorTypes(), "the commit types that make a major release, repeat the flag or use commas")
+	runCmd.PersistentFlags().Bool("dry_run", false, "calculate results without creating or pushing tags")
+	runCmd.PersistentFlags().Bool("github_action", false, "write outputs for later GitHub Actions steps")
+	runCmd.PersistentFlags().Bool("output_json", true, "write the results as a JSON object")
+	runCmd.PersistentFlags().Bool("atomic", true, "push the branch and all tags as one atomic operation")
+	runCmd.PersistentFlags().String("pre_release_string", "", "set the semantic version pre-release identifier")
+	runCmd.PersistentFlags().String("build_string", "", "set the semantic version build identifier")
+	runCmd.PersistentFlags().String("remote", "origin", "push tags to this Git remote")
+	runCmd.PersistentFlags().String("branch", "main", "push this branch with the tags; set an empty value to push only tags")
+	runCmd.PersistentFlags().StringArray("allowed_types", []string{}, "allow only these commit types to change a version; repeat the flag or use commas; the default allows all configured types and BREAKING CHANGE")
+	runCmd.PersistentFlags().StringArray("patch_types", core.DefaultPatchTypes(), "make a patch release for these commit types; repeat the flag or use commas; fix is always a patch type")
+	runCmd.PersistentFlags().StringArray("minor_types", core.DefaultMinorTypes(), "make a minor release for these commit types; repeat the flag or use commas; feat is always a minor type")
+	runCmd.PersistentFlags().StringArray("major_types", core.DefaultMajorTypes(), "make a major release for these commit types; repeat the flag or use commas")
 	runCmd.PersistentFlags().Bool("short-versions", false, "also update mutable vMAJOR.MINOR and vMAJOR tags")
 	runCmd.PersistentFlags().Bool("skip-short-versions", false, "keep full version tags only and suppress the short-version migration warning")
-	runCmd.PersistentFlags().StringArray("directories", []string{}, "one subdirectory to apply its own tag for, named after the last part of the path, repeat the flag for more tags, which makes github action outputs comma separated")
-	runCmd.PersistentFlags().StringArray("dir_group", []string{}, "a comma separated list of subdirectories that share one tag, named after the first directory in the list, repeat the flag for more tag groups, which makes github action outputs comma separated")
-	runCmd.PersistentFlags().StringArray("target", []string{}, "a named release target in name=path[,path...] form, repeat the flag for more targets")
+	runCmd.PersistentFlags().StringArray("directories", []string{}, "tag one path by its base name; repeat the flag for more paths")
+	runCmd.PersistentFlags().StringArray("dir_group", []string{}, "tag a comma-separated path group by the first path's base name; repeat the flag for more groups")
+	runCmd.PersistentFlags().StringArray("target", []string{}, "define a release target as name=path[,path...]; repeat the flag for more targets")
 
-	// bind flags
 	err := viper.BindPFlags(runCmd.PersistentFlags())
-	// die on error
 	if err != nil {
 		logging.Log.WithError(err).Error("error initializing configuration")
 		panic(err)
