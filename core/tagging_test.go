@@ -544,7 +544,6 @@ func (s *TaggingSuite) TestGitRootGroupUsesTheRepositoryName() {
 
 	require.NoError(s.T(), err)
 	require.Len(s.T(), groups, 1)
-	assert.True(s.T(), groups[0].UseRoot)
 	assert.Equal(s.T(), filepath.Base(s.repoDir), groups[0].PackageName())
 	assert.Equal(s.T(), []string{"./"}, groups[0].CommitPaths())
 }

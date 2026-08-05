@@ -210,12 +210,9 @@ func ParseVersionInfo(line string) (*VersionInfo, error) {
 	}
 
 	parts := strings.Split(split[0], "/")
-	// the last part is the version, which we can clip the v off of
 	versionPart := strings.TrimPrefix(parts[len(parts)-1], "v")
-	// everything else is the package name
 	packageName := strings.Join(parts[:len(parts)-1], "/")
 
-	// If there's a PreRelease string, it will be after the first -
 	versionComponents := strings.SplitN(versionPart, "-", 2)
 	version := versionComponents[0]
 
@@ -224,7 +221,6 @@ func ParseVersionInfo(line string) (*VersionInfo, error) {
 		preRelease = versionComponents[1]
 	}
 
-	// If there is a build string, we'll see it in the PreRelease now after the +
 	buildComponents := strings.SplitN(preRelease, "+", 2)
 	if len(buildComponents) > 1 {
 		preRelease = buildComponents[0]
@@ -319,7 +315,7 @@ func (t *tagger) latestVersion(group DirectoryVersionInfo) (*VersionInfo, error)
 		}, nil
 	}
 
-	// None found, so provide the last version as 0.1.0 and the first parentless commit we find
+	// Start at 0.1.0 so that the first conventional commit creates a later tag.
 	commit, err := firstCommit()
 	if err != nil {
 		return nil, err
@@ -368,10 +364,8 @@ func (t *tagger) analyzeCommits(group *DirectoryVersionInfo) error {
 		releaseNotes = append(releaseNotes, commit.Subject)
 	}
 
-	// If no change is needed, this will be a noOp
 	nextVersion.BumpVersion(highest, t.config.PreReleaseString, t.config.BuildString)
 
-	// This only happens after no errors
 	group.NextVersion = &VersionInfo{
 		Package:    group.LastVersion.Package,
 		Version:    nextVersion,

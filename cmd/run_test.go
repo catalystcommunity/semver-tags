@@ -189,3 +189,10 @@ func TestTargetsEnvironmentReplacesFile(t *testing.T) {
 		Name: "environment", Paths: []string{"services/worker"},
 	}}, targets)
 }
+
+func TestRunRejectsPositionalArguments(t *testing.T) {
+	err := runCmd.Args(runCmd, []string{"unexpected"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown command")
+}

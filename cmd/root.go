@@ -14,19 +14,19 @@ import (
 
 var cfgFile string
 
-// rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "semver-tags",
-	Short: "Use git tags to add semantic-release style semver tags on conventional commits",
-	Long: `Calculate the next semver tag to add based on semantic-release style semver tags,
-	which will analyze conventional commits since the last relevant tags and
-	perform the git tags while providing state outputs.
-	Normal LOG_LEVEL env var rule applies, if you want clean output, set it to ERROR
-	and check for the exit code being 0 before you parse outputs.`,
+	Short: "Create semantic version Git tags from conventional commits",
+	Long: `Calculate the next semantic version from conventional commits.
+
+The command can create tags for the full repository or for separate release
+targets. It can also write JSON or GitHub Actions outputs.
+
+Set LOG_LEVEL=ERROR when another command must parse the JSON output. Always
+check for a zero exit status before you use the output.`,
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
+// Execute runs the command-line interface.
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
@@ -36,38 +36,24 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is .semver-tags.yaml in the current directory)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
-// initConfig reads in config file and ENV variables if set.
 func initConfig() {
 	if cfgFile != "" {
-		// Use config file from the flag.
 		viper.SetConfigFile(cfgFile)
 	} else {
-		// Find the working directory.
 		cwd, err := os.Getwd()
 		cobra.CheckErr(err)
 
-		// Search config in current working directory with name ".semver-tags" (with extension).
 		viper.AddConfigPath(cwd)
 		viper.SetConfigType("yaml")
 		viper.SetConfigName(".semver-tags")
 	}
 
-	viper.AutomaticEnv() // read in environment variables that match
+	viper.AutomaticEnv()
 
-	// If a config file is found, read it in. A missing file is normal, so only
-	// a file that can not be read is an error.
+	// A configuration file is optional. Report other read errors.
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	} else {
