@@ -145,6 +145,47 @@ def validate_conventional_commits(code_dir: Path) -> None:
     log_stdout("All commits follow the conventional commit format.")
 
 
+# The release job sets this Go variable with the linker. This check proves
+# that the variable name and the output format still work before a merge, so a
+# rename in cmd/version.go cannot break the release silently.
+VERSION_VARIABLE = "github.com/catalystcommunity/semver-tags/cmd.version"
+VERSION_CHECK_VALUE = "9.9.9"
+
+
+def check_version_flag(code_dir: Path, environment: Dict[str, str]) -> None:
+    """Build with a linker version and prove that --version reports it."""
+    binary = Path("/tmp/semver-tags-ci/version-check/semver-tags")
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    _run(
+        [
+            "go",
+            "build",
+            "-buildvcs=false",
+            "-trimpath",
+            "-ldflags",
+            f"-X {VERSION_VARIABLE}={VERSION_CHECK_VALUE}",
+            "-o",
+            str(binary),
+            ".",
+        ],
+        cwd=code_dir,
+        env=environment,
+    )
+    result = _run(
+        [str(binary), "--version"],
+        cwd=code_dir,
+        capture_output=True,
+        env=environment,
+    )
+    expected = f"semver-tags {VERSION_CHECK_VALUE}"
+    actual = result.stdout.strip()
+    if actual != expected:
+        raise RuntimeError(
+            f"semver-tags --version printed '{actual}', expected '{expected}'"
+        )
+    log_stdout(f"Verified semver-tags --version: {actual}")
+
+
 def test_go(code_dir: Path) -> None:
     """Build, vet, and test the semver-tags module."""
     environment = _go_environment()
@@ -155,6 +196,7 @@ def test_go(code_dir: Path) -> None:
         cwd=code_dir,
         env=environment,
     )
+    check_version_flag(code_dir, environment)
 
 
 GOLANGCI_LINT_VERSION = "v2.5.0"
