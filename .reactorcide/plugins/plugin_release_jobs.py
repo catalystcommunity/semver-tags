@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import re
 import shlex
 import subprocess
@@ -48,6 +49,15 @@ LEGACY_ASSET_NAME = "semver-tags.tar.gz"
 LEGACY_PLATFORM = ("linux", "amd64")
 SECRET_ENVIRONMENT_NAMES = ("GITHUB_PAT",)
 BUILD_DIR = Path("/tmp/semver-tags-release")
+# The Go linker writes the release version into this variable. cmd/version.go
+# reads it, and `semver-tags --version` prints it as `semver-tags X.Y.Z`.
+VERSION_VARIABLE = "github.com/catalystcommunity/semver-tags/cmd.version"
+HOST_ARCHITECTURES = {
+    "x86_64": "amd64",
+    "amd64": "amd64",
+    "aarch64": "arm64",
+    "arm64": "arm64",
+}
 
 
 def _sanitized_environment() -> Dict[str, str]:
@@ -123,10 +133,89 @@ def _go_environment(
     environment["GOMODCACHE"] = str(home / ".cache" / "go-mod")
     if os_name:
         environment["GOOS"] = os_name
+    else:
+        environment.pop("GOOS", None)
     if arch:
         environment["GOARCH"] = arch
+    else:
+        environment.pop("GOARCH", None)
     environment["CGO_ENABLED"] = "0"
     return environment
+
+
+def _version_ldflags(version: str) -> str:
+    """Return the linker flags that set the reported version."""
+    return f"-X {VERSION_VARIABLE}={version}"
+
+
+def _host_platform() -> Optional[tuple[str, str]]:
+    """Return the runner's Go platform, or None when it is not a release platform."""
+    os_name = platform.system().lower()
+    arch = HOST_ARCHITECTURES.get(platform.machine().lower())
+    if arch is None or not PLATFORM_PATTERN.fullmatch(f"{os_name}/{arch}"):
+        return None
+    return os_name, arch
+
+
+def _verify_binary_version(binary_path: Path, version: str) -> None:
+    """Fail when the binary does not report the release version."""
+    expected = f"semver-tags {version}"
+    try:
+        result = _run(
+            [str(binary_path), "--version"],
+            cwd=binary_path.parent,
+            env=_go_environment(),
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as error:
+        raise _semver_failure(error) from error
+    actual = result.stdout.strip()
+    if actual != expected:
+        raise RuntimeError(
+            f"{binary_path.name} --version printed '{actual}', expected '{expected}'"
+        )
+    log_stdout(f"Verified {binary_path.name} --version: {actual}")
+
+
+def _verify_release_version(
+    code_dir: Path,
+    binary_path: Path,
+    version: str,
+    os_name: str,
+    arch: str,
+) -> None:
+    """Prove that the release build reports the tag version.
+
+    The runner can only start a binary for its own platform. For that platform
+    the check runs the release binary itself. For every other platform the
+    check builds a second binary for the runner with the same linker flags, so
+    each platform job proves that the version wiring works.
+    """
+    if _host_platform() == (os_name, arch):
+        _verify_binary_version(binary_path, version)
+        return
+
+    check_binary = BUILD_DIR / "version-check" / "semver-tags"
+    check_binary.parent.mkdir(parents=True, exist_ok=True)
+    _run(
+        [
+            "go",
+            "build",
+            "-buildvcs=false",
+            "-trimpath",
+            "-ldflags",
+            _version_ldflags(version),
+            "-o",
+            str(check_binary),
+            ".",
+        ],
+        cwd=code_dir,
+        env=_go_environment(),
+    )
+    try:
+        _verify_binary_version(check_binary, version)
+    finally:
+        check_binary.unlink(missing_ok=True)
 
 
 def _source_sha(code_dir: Path) -> str:
@@ -418,7 +507,12 @@ def _release_asset_paths(
     os_name: str,
     arch: str,
 ) -> List[Path]:
-    """Build one platform binary and return every archive to upload for it."""
+    """Build one platform binary and return every archive to upload for it.
+
+    The build writes the release version into the binary. The version is the
+    tag without the v prefix, so `semver-tags --version` prints `semver-tags
+    X.Y.Z` for tag vX.Y.Z.
+    """
     release_dir = BUILD_DIR / "assets"
     release_dir.mkdir(parents=True, exist_ok=True)
     binary_name = "semver-tags.exe" if os_name == "windows" else "semver-tags"
@@ -429,6 +523,8 @@ def _release_asset_paths(
             "build",
             "-buildvcs=false",
             "-trimpath",
+            "-ldflags",
+            _version_ldflags(version),
             "-o",
             str(binary_path),
             ".",
@@ -436,6 +532,7 @@ def _release_asset_paths(
         cwd=code_dir,
         env=_go_environment(os_name, arch),
     )
+    _verify_release_version(code_dir, binary_path, version, os_name, arch)
 
     asset_paths = []
     archive_stem = f"semver-tags-{version}-{os_name}-{arch}"

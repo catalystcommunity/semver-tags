@@ -26,6 +26,20 @@ By default, the command uses the `origin` remote and pushes the `main` branch
 with the tags. It prints a JSON object by default. Use `--output_json=false`
 if you do not want this output.
 
+## Version
+
+Use `--version` to show the version of the binary. The output is one line with
+two words. The second word is the version without the `v` prefix.
+
+```sh
+$ semver-tags --version
+semver-tags 1.2.3
+```
+
+A release binary reports the version of its release tag. A `go install` build
+reports the module version. Other local builds report the version from the Go
+build information, or the word `dev` when there is none.
+
 ## Directories
 
 Give the `--directories` flag one time for each tag you want. Each flag makes
@@ -355,7 +369,8 @@ definitions are in `.reactorcide/`:
   tag.
 * `workflows/release.yaml` runs on the tag event. It first proves that CI made
   the draft release, then builds one archive for each platform, then publishes
-  the release.
+  the release. Each build writes the tag version into the binary with the Go
+  linker and then proves that `--version` reports that version.
 
 The jobs in `jobs/` are thin. The Python plugins in `plugins/` do the work
 through the runnerlib lifecycle. There are no shell scripts.
@@ -373,6 +388,14 @@ golangci-lint run ./...
 ```
 
 `.golangci.yml` holds the linter settings that CI uses.
+
+To build a binary that reports a release version, set the `cmd.version`
+variable with the Go linker. The `test-go` CI job runs this build and checks
+the `--version` output, so a change to the variable name fails a pull request.
+
+```sh
+go build -ldflags "-X github.com/catalystcommunity/semver-tags/cmd.version=1.2.3" .
+```
 
 ## Why
 
